@@ -1,5 +1,7 @@
 package com.elderhive.config;
 
+import com.elderhive.filter.AuditFilter;
+import com.elderhive.filter.RateLimitingFilter;
 import com.elderhive.security.CustomUserDetailsService;
 import com.elderhive.security.JwtAuthFilter;
 import jakarta.servlet.http.HttpServletResponse;
@@ -48,6 +50,8 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
+    private final RateLimitingFilter rateLimitingFilter;
+    private final AuditFilter auditFilter;
     private final CustomUserDetailsService userDetailsService;
 
     @Value("${app.frontend.url:http://localhost:5173}")
@@ -99,7 +103,9 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())
+                .addFilterBefore(rateLimitingFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(auditFilter, JwtAuthFilter.class)
                 .exceptionHandling(ex ->
                         ex.authenticationEntryPoint((req, res, e) ->
                                 res.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized")
