@@ -17,6 +17,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.List;
 import java.util.Set;
@@ -150,6 +151,15 @@ public class GlobalExceptionHandler {
         ResponseModel<Void> body = new ResponseModel<>("HTTP method " + ex.getMethod() + " is not supported for this endpoint", null, ExceptionCodeEnum.BAD_REQUEST.getValue());
         body.toFailure();
         return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(body);
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ResponseModel<Void>> handleNoResourceFound(NoResourceFoundException ex) {
+        log.warn("NoResourceFoundException: {}", ex.getMessage());
+        ResponseModel<Void> body = new ResponseModel<>("The requested resource was not found.", null,
+                ExceptionCodeEnum.DATA_NOT_FOUND.getValue());
+        body.toFailure();
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
     }
 
     @ExceptionHandler(AccessDeniedException.class)
