@@ -73,6 +73,12 @@ app:
   password-reset:
     token-expiry-minutes: ${PASSWORD_RESET_TOKEN_EXPIRY_MINUTES:30}
     url: ${PASSWORD_RESET_URL:http://localhost:5173/reset-password}
+  admin:
+    # Blank by default -> AdminBootstrapSeeder's assignment step is a no-op. Set this to
+    # an existing ADMIN account's email to grant it the Super Admin role on next boot -
+    # the only way to create the first fine-grained admin, since there's no self-service
+    # "become admin" flow. Safe to leave set permanently (see the seeder's own javadoc).
+    bootstrap-email: ${ADMIN_BOOTSTRAP_EMAIL:}
 
 jwt:
   # dev-only fallback so the app boots with zero setup locally - every other environment MUST
