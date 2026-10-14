@@ -1,10 +1,12 @@
 package com.elderhive.services.impl;
 
+import com.elderhive.dtos.Authentication.ForgotPasswordRequest;
 import com.elderhive.dtos.Authentication.LoginRequest;
 import com.elderhive.dtos.Authentication.LoginResult;
 import com.elderhive.dtos.Authentication.RefreshResult;
 import com.elderhive.dtos.Authentication.RegisterRequest;
 import com.elderhive.dtos.Authentication.RegisterResponse;
+import com.elderhive.entities.PasswordResetToken;
 import com.elderhive.entities.RefreshToken;
 import com.elderhive.entities.User;
 import com.elderhive.entities.UserRoleMapping;
@@ -12,18 +14,24 @@ import com.elderhive.enums.ExceptionCodeEnum;
 import com.elderhive.enums.UserStatusEnum;
 import com.elderhive.enums.UserTypeEnum;
 import com.elderhive.exceptions.GenericException;
+import com.elderhive.repositories.PasswordResetTokenRepository;
 import com.elderhive.repositories.UserRepository;
 import com.elderhive.repositories.UserRoleMappingRepository;
 import com.elderhive.security.JwtUtil;
 import com.elderhive.services.AuthService;
+import com.elderhive.services.EmailService;
 import com.elderhive.services.RefreshTokenService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -41,6 +49,14 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final RefreshTokenService refreshTokenService;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
+    private final EmailService emailService;
+
+    @Value("${app.password-reset.token-expiry-minutes}")
+    private int passwordResetExpiryMinutes;
+
+    @Value("${app.password-reset.url}")
+    private String passwordResetUrl;
 
     @Override
     @Transactional
@@ -155,5 +171,38 @@ public class AuthServiceImpl implements AuthService {
         if (rawRefreshToken != null && !rawRefreshToken.isBlank()) {
             refreshTokenService.revoke(rawRefreshToken);
         }
+    }
+
+    @Override
+    @Transactional
+    public String forgotPassword(ForgotPasswordRequest request) {
+        // Do not reveal whether the email exists — this branch is the only difference
+        // between "account found" and "not found", and it never surfaces to the caller.
+        Optional<User> maybeUser = userRepository.findByEmail(request.getEmail());
+
+        if (maybeUser.isPresent()) {
+            User user = maybeUser.get();
+            // Invalidate any previously-issued, still-unused reset link before creating
+            // a new one, so only the most recent link is ever valid.
+            passwordResetTokenRepository.deleteByUserId(user.getId());
+
+            String token = UUID.randomUUID().toString();
+            passwordResetTokenRepository.save(PasswordResetToken.builder()
+                    .token(token)
+                    .userId(user.getId())
+                    .expiryDate(LocalDateTime.now().plusMinutes(passwordResetExpiryMinutes))
+                    .used(false)
+                    .build());
+
+            String resetLink = passwordResetUrl + "?token=" + token;
+            String html = "<p>Hello " + (user.getFullName() != null ? user.getFullName() : "there") + ",</p>"
+                    + "<p>We received a request to reset your ElderHive password. This link expires in "
+                    + passwordResetExpiryMinutes + " minutes:</p>"
+                    + "<p><a href=\"" + resetLink + "\">Reset your password</a></p>"
+                    + "<p>If you did not request this, you can safely ignore this email.</p>";
+            emailService.sendEmail(user.getEmail(), "Reset your ElderHive password", html);
+        }
+
+        return "If an account with that email exists, a password reset link has been sent.";
     }
 }

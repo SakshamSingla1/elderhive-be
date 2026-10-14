@@ -1,5 +1,6 @@
 package com.elderhive.controllers;
 
+import com.elderhive.dtos.Authentication.ForgotPasswordRequest;
 import com.elderhive.dtos.Authentication.LoginRequest;
 import com.elderhive.dtos.Authentication.LoginResponse;
 import com.elderhive.dtos.Authentication.LoginResult;
@@ -84,6 +85,12 @@ public class AuthController {
         authService.logout(rawRefreshToken);
         clearAuthCookies(response);
         return ApiResponse.successResponse();
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<ResponseModel<String>> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        String message = authService.forgotPassword(request);
+        return ApiResponse.successResponse(message, message);
     }
 
     private String extractCookieValue(HttpServletRequest request, String name) {
