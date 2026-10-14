@@ -44,11 +44,14 @@ public class GlobalExceptionHandler {
             ExceptionCodeEnum.BAD_REQUEST,
             ExceptionCodeEnum.INVALID_ARGUMENT,
             ExceptionCodeEnum.VALIDATION_FAILED,
-            ExceptionCodeEnum.FORMAT_ERROR
+            ExceptionCodeEnum.FORMAT_ERROR,
+            ExceptionCodeEnum.PASSWORD_TOO_WEAK,
+            ExceptionCodeEnum.INVALID_ROLE
     );
 
     private static final Set<ExceptionCodeEnum> CONFLICT_CODES = Set.of(
-            ExceptionCodeEnum.CONFLICT
+            ExceptionCodeEnum.CONFLICT,
+            ExceptionCodeEnum.DUPLICATE_EMAIL
     );
 
     private static final Set<ExceptionCodeEnum> NOT_FOUND_CODES = Set.of(
