@@ -65,13 +65,16 @@ public class User extends Auditable {
      * further restricts WHAT an ADMIN specifically can do once inside the admin portal, by
      * way of that Role's granted Permissions. The two are independent axes, not a hierarchy:
      * an ELDER/FAMILY_MEMBER/CARETAKER/SUPER_ADMIN's roleId (if any) is never consulted —
-     * only an ADMIN's is (enforced by the permission guard built in Prompt 23).
+     * only an ADMIN's is.
      *
-     * <p>Null means "no fine-grained role assigned yet" — an ADMIN in that state keeps full
-     * admin-portal access (fail-open for today's default, same as ElderSphere's equivalent
-     * guard), not no access. SUPER_ADMIN always has full access regardless of roleId — it
-     * never goes through the permission guard at all — but still gets assigned a Role row
-     * by the seeder (Prompt 24) purely so the admin UI has something consistent to display.
+     * <p>Null means "no fine-grained role assigned yet" — and {@link com.elderhive.security
+     * .AdminPermissionGuard} (Prompt 23) treats that as a DENY, not fail-open: unlike
+     * ElderSphere's equivalent guard (which fails open for legacy-compat reasons that don't
+     * apply to a brand-new project), every branch here that can't fully resolve to an
+     * explicit grant denies. SUPER_ADMIN always has full access regardless of roleId — it's
+     * checked via UserTypeEnum and never goes through the Role lookup at all — but still gets
+     * assigned a Role row by the seeder (Prompt 24) purely so the admin UI has something
+     * consistent to display.
      */
     @Column(name = "role_id")
     private Long roleId;
