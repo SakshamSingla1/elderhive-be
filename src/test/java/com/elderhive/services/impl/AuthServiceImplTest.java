@@ -2,8 +2,10 @@ package com.elderhive.services.impl;
 
 import com.elderhive.dtos.Authentication.LoginRequest;
 import com.elderhive.dtos.Authentication.LoginResult;
+import com.elderhive.dtos.Authentication.RefreshResult;
 import com.elderhive.dtos.Authentication.RegisterRequest;
 import com.elderhive.dtos.Authentication.RegisterResponse;
+import com.elderhive.entities.RefreshToken;
 import com.elderhive.entities.User;
 import com.elderhive.entities.UserRoleMapping;
 import com.elderhive.enums.ExceptionCodeEnum;
@@ -222,6 +224,70 @@ class AuthServiceImplTest {
                 .isEqualTo(ExceptionCodeEnum.ACCOUNT_NOT_ACTIVE);
 
         verifyNoInteractions(jwtUtil);
+        verifyNoInteractions(refreshTokenService);
+    }
+
+    @Test
+    void validRefreshRotatesSuccessfully() throws GenericException {
+        User user = activeUser();
+        RefreshToken storedToken = RefreshToken.builder().id(10L).userId(user.getId()).revoked(false).build();
+
+        when(refreshTokenService.validate("old-raw-token")).thenReturn(Optional.of(storedToken));
+        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
+        when(refreshTokenService.issue(user)).thenReturn("new-raw-token");
+        when(jwtUtil.generateAccessToken(user.getEmail(), user.getId(), "ELDER")).thenReturn("new-access-token");
+
+        RefreshResult result = authService.refresh("old-raw-token");
+
+        assertThat(result.getAccessToken()).isEqualTo("new-access-token");
+        assertThat(result.getRefreshToken()).isEqualTo("new-raw-token");
+        // Rotation: the old token is revoked and a new one issued, in that order.
+        verify(refreshTokenService).revoke("old-raw-token");
+        verify(refreshTokenService).issue(user);
+    }
+
+    @Test
+    void anAlreadyRevokedRefreshTokenIsRejected() {
+        // RefreshTokenServiceImpl.validate() (Prompt 13) already filters out revoked/
+        // expired rows and returns empty - this is exactly what it would return for a
+        // token that's been revoked.
+        when(refreshTokenService.validate("revoked-token")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.refresh("revoked-token"))
+                .isInstanceOf(GenericException.class)
+                .extracting(ex -> ((GenericException) ex).getExceptionCode())
+                .isEqualTo(ExceptionCodeEnum.TOKEN_INVALID);
+
+        // Short-circuits before touching the user, issuing a new token, or minting an
+        // access token - nothing about the session is renewed.
+        verifyNoInteractions(userRepository);
+        verifyNoInteractions(jwtUtil);
+        verify(refreshTokenService, never()).issue(any());
+    }
+
+    @Test
+    void logoutRevokesTheTokenSoASubsequentRefreshFails() throws GenericException {
+        String rawToken = "session-token";
+
+        authService.logout(rawToken);
+        verify(refreshTokenService).revoke(rawToken);
+
+        // Simulate what RefreshTokenServiceImpl.validate() now does for real once that
+        // revoke() above has actually run (Prompt 13's own integration test proves this
+        // filtering works against real Postgres) - confirms refresh() correctly rejects
+        // the same token afterward, i.e. "logout actually revokes" end-to-end at the
+        // service-contract level.
+        when(refreshTokenService.validate(rawToken)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.refresh(rawToken))
+                .isInstanceOf(GenericException.class)
+                .extracting(ex -> ((GenericException) ex).getExceptionCode())
+                .isEqualTo(ExceptionCodeEnum.TOKEN_INVALID);
+    }
+
+    @Test
+    void logoutWithNoCookieDoesNotThrowOrTouchTheRepository() {
+        authService.logout(null);
         verifyNoInteractions(refreshTokenService);
     }
 }

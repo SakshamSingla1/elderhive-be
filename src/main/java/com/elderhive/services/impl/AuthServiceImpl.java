@@ -2,8 +2,10 @@ package com.elderhive.services.impl;
 
 import com.elderhive.dtos.Authentication.LoginRequest;
 import com.elderhive.dtos.Authentication.LoginResult;
+import com.elderhive.dtos.Authentication.RefreshResult;
 import com.elderhive.dtos.Authentication.RegisterRequest;
 import com.elderhive.dtos.Authentication.RegisterResponse;
+import com.elderhive.entities.RefreshToken;
 import com.elderhive.entities.User;
 import com.elderhive.entities.UserRoleMapping;
 import com.elderhive.enums.ExceptionCodeEnum;
@@ -118,5 +120,40 @@ public class AuthServiceImpl implements AuthService {
                 .userType(user.getUserType())
                 .roles(roles)
                 .build();
+    }
+
+    @Override
+    public RefreshResult refresh(String rawRefreshToken) throws GenericException {
+        if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
+            throw new GenericException(ExceptionCodeEnum.TOKEN_INVALID, "No refresh token provided.");
+        }
+
+        // validate() already filters out revoked/expired rows (Prompt 13) - a single
+        // generic TOKEN_INVALID for "not found, revoked, or expired" rather than
+        // distinguishing which, same not-leaking-why principle as login's INVALID_CREDENTIALS.
+        RefreshToken storedToken = refreshTokenService.validate(rawRefreshToken)
+                .orElseThrow(() -> new GenericException(ExceptionCodeEnum.TOKEN_INVALID, "Invalid or expired refresh token."));
+
+        User user = userRepository.findById(storedToken.getUserId())
+                .orElseThrow(() -> new GenericException(ExceptionCodeEnum.USER_NOT_FOUND, "User not found."));
+
+        // Rotation: the old token is revoked and a brand new one issued, every time -
+        // a stolen-and-replayed refresh token is usable at most once before its real
+        // owner's next refresh call invalidates it (standard rotation-theft detection).
+        refreshTokenService.revoke(rawRefreshToken);
+        String newRefreshToken = refreshTokenService.issue(user);
+        String newAccessToken = jwtUtil.generateAccessToken(user.getEmail(), user.getId(), user.getUserType().name());
+
+        return RefreshResult.builder()
+                .accessToken(newAccessToken)
+                .refreshToken(newRefreshToken)
+                .build();
+    }
+
+    @Override
+    public void logout(String rawRefreshToken) {
+        if (rawRefreshToken != null && !rawRefreshToken.isBlank()) {
+            refreshTokenService.revoke(rawRefreshToken);
+        }
     }
 }
