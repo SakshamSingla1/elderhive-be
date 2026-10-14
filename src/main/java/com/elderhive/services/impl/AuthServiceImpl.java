@@ -6,6 +6,7 @@ import com.elderhive.dtos.Authentication.LoginResult;
 import com.elderhive.dtos.Authentication.RefreshResult;
 import com.elderhive.dtos.Authentication.RegisterRequest;
 import com.elderhive.dtos.Authentication.RegisterResponse;
+import com.elderhive.dtos.Authentication.ResetPasswordRequest;
 import com.elderhive.entities.PasswordResetToken;
 import com.elderhive.entities.RefreshToken;
 import com.elderhive.entities.User;
@@ -204,5 +205,38 @@ public class AuthServiceImpl implements AuthService {
         }
 
         return "If an account with that email exists, a password reset link has been sent.";
+    }
+
+    @Override
+    @Transactional
+    public String resetPassword(ResetPasswordRequest request) throws GenericException {
+        // Not found, already used, or expired all collapse to the same TOKEN_INVALID —
+        // same not-leaking-why principle as refresh()'s token validation.
+        PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(request.getToken())
+                .orElseThrow(() -> new GenericException(ExceptionCodeEnum.TOKEN_INVALID, "Invalid or expired reset token."));
+
+        if (resetToken.isUsed() || resetToken.getExpiryDate().isBefore(LocalDateTime.now())) {
+            throw new GenericException(ExceptionCodeEnum.TOKEN_INVALID, "Invalid or expired reset token.");
+        }
+
+        if (request.getNewPassword() == null || request.getNewPassword().length() < MIN_PASSWORD_LENGTH) {
+            throw new GenericException(ExceptionCodeEnum.PASSWORD_TOO_WEAK,
+                    "Password must be at least " + MIN_PASSWORD_LENGTH + " characters long.");
+        }
+
+        User user = userRepository.findById(resetToken.getUserId())
+                .orElseThrow(() -> new GenericException(ExceptionCodeEnum.USER_NOT_FOUND, "User not found."));
+
+        user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+
+        resetToken.setUsed(true);
+        passwordResetTokenRepository.save(resetToken);
+
+        // Security measure (explicit requirement): a password reset ends every other
+        // active session too, in case the reset was triggered by a compromised account.
+        refreshTokenService.revokeAllForUser(user.getId());
+
+        return "Password reset successfully.";
     }
 }

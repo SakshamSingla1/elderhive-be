@@ -6,6 +6,7 @@ import com.elderhive.dtos.Authentication.LoginResult;
 import com.elderhive.dtos.Authentication.RefreshResult;
 import com.elderhive.dtos.Authentication.RegisterRequest;
 import com.elderhive.dtos.Authentication.RegisterResponse;
+import com.elderhive.dtos.Authentication.ResetPasswordRequest;
 import com.elderhive.exceptions.GenericException;
 
 public interface AuthService {
@@ -25,4 +26,9 @@ public interface AuthService {
     /** Always returns the same generic confirmation message, whether or not the email
      *  is actually registered — never throws, never leaks which emails have accounts. */
     String forgotPassword(ForgotPasswordRequest request);
+
+    /** Validates the reset token (not used, not expired), updates the password, marks
+     *  the token used, and revokes every existing refresh token for that user — a
+     *  password reset ends every other active session as a security measure. */
+    String resetPassword(ResetPasswordRequest request) throws GenericException;
 }

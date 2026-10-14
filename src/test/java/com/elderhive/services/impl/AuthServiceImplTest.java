@@ -5,6 +5,8 @@ import com.elderhive.dtos.Authentication.LoginResult;
 import com.elderhive.dtos.Authentication.RefreshResult;
 import com.elderhive.dtos.Authentication.RegisterRequest;
 import com.elderhive.dtos.Authentication.RegisterResponse;
+import com.elderhive.dtos.Authentication.ResetPasswordRequest;
+import com.elderhive.entities.PasswordResetToken;
 import com.elderhive.entities.RefreshToken;
 import com.elderhive.entities.User;
 import com.elderhive.entities.UserRoleMapping;
@@ -12,9 +14,11 @@ import com.elderhive.enums.ExceptionCodeEnum;
 import com.elderhive.enums.UserStatusEnum;
 import com.elderhive.enums.UserTypeEnum;
 import com.elderhive.exceptions.GenericException;
+import com.elderhive.repositories.PasswordResetTokenRepository;
 import com.elderhive.repositories.UserRepository;
 import com.elderhive.repositories.UserRoleMappingRepository;
 import com.elderhive.security.JwtUtil;
+import com.elderhive.services.EmailService;
 import com.elderhive.services.RefreshTokenService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,6 +28,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -57,6 +62,12 @@ class AuthServiceImplTest {
 
     @Mock
     private RefreshTokenService refreshTokenService;
+
+    @Mock
+    private PasswordResetTokenRepository passwordResetTokenRepository;
+
+    @Mock
+    private EmailService emailService;
 
     @InjectMocks
     private AuthServiceImpl authService;
@@ -289,5 +300,94 @@ class AuthServiceImplTest {
     void logoutWithNoCookieDoesNotThrowOrTouchTheRepository() {
         authService.logout(null);
         verifyNoInteractions(refreshTokenService);
+    }
+
+    @Test
+    void rejectsAnExpiredResetToken() {
+        PasswordResetToken expiredToken = PasswordResetToken.builder()
+                .id(1L)
+                .token("expired-token")
+                .userId(1L)
+                .used(false)
+                .expiryDate(LocalDateTime.now().minusMinutes(1))
+                .build();
+        ResetPasswordRequest request = ResetPasswordRequest.builder()
+                .token("expired-token")
+                .newPassword("brandnewpass123")
+                .build();
+
+        when(passwordResetTokenRepository.findByToken("expired-token")).thenReturn(Optional.of(expiredToken));
+
+        assertThatThrownBy(() -> authService.resetPassword(request))
+                .isInstanceOf(GenericException.class)
+                .extracting(ex -> ((GenericException) ex).getExceptionCode())
+                .isEqualTo(ExceptionCodeEnum.TOKEN_INVALID);
+
+        // Fails before ever touching the user or revoking any session.
+        verifyNoInteractions(userRepository);
+        verifyNoInteractions(refreshTokenService);
+        verify(passwordResetTokenRepository, never()).save(any());
+    }
+
+    @Test
+    void rejectsAnAlreadyUsedResetToken() {
+        PasswordResetToken usedToken = PasswordResetToken.builder()
+                .id(2L)
+                .token("used-token")
+                .userId(1L)
+                .used(true)
+                .expiryDate(LocalDateTime.now().plusMinutes(10))
+                .build();
+        ResetPasswordRequest request = ResetPasswordRequest.builder()
+                .token("used-token")
+                .newPassword("brandnewpass123")
+                .build();
+
+        when(passwordResetTokenRepository.findByToken("used-token")).thenReturn(Optional.of(usedToken));
+
+        assertThatThrownBy(() -> authService.resetPassword(request))
+                .isInstanceOf(GenericException.class)
+                .extracting(ex -> ((GenericException) ex).getExceptionCode())
+                .isEqualTo(ExceptionCodeEnum.TOKEN_INVALID);
+
+        verifyNoInteractions(userRepository);
+        verifyNoInteractions(refreshTokenService);
+        verify(passwordResetTokenRepository, never()).save(any());
+    }
+
+    @Test
+    void successfulResetUpdatesThePasswordMarksTheTokenUsedAndInvalidatesAllSessions() throws GenericException {
+        User user = activeUser();
+        PasswordResetToken validToken = PasswordResetToken.builder()
+                .id(3L)
+                .token("valid-token")
+                .userId(user.getId())
+                .used(false)
+                .expiryDate(LocalDateTime.now().plusMinutes(10))
+                .build();
+        ResetPasswordRequest request = ResetPasswordRequest.builder()
+                .token("valid-token")
+                .newPassword("brandnewpass123")
+                .build();
+
+        when(passwordResetTokenRepository.findByToken("valid-token")).thenReturn(Optional.of(validToken));
+        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
+        when(passwordEncoder.encode("brandnewpass123")).thenReturn("new-hashed-password");
+
+        String message = authService.resetPassword(request);
+
+        assertThat(message).isEqualTo("Password reset successfully.");
+
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(userCaptor.capture());
+        assertThat(userCaptor.getValue().getPasswordHash()).isEqualTo("new-hashed-password");
+
+        ArgumentCaptor<PasswordResetToken> tokenCaptor = ArgumentCaptor.forClass(PasswordResetToken.class);
+        verify(passwordResetTokenRepository).save(tokenCaptor.capture());
+        assertThat(tokenCaptor.getValue().isUsed()).isTrue();
+
+        // The security measure this prompt explicitly asked for: every existing session
+        // for this user is ended, not just the reset flow's own tokens.
+        verify(refreshTokenService).revokeAllForUser(user.getId());
     }
 }

@@ -7,6 +7,7 @@ import com.elderhive.dtos.Authentication.LoginResult;
 import com.elderhive.dtos.Authentication.RefreshResult;
 import com.elderhive.dtos.Authentication.RegisterRequest;
 import com.elderhive.dtos.Authentication.RegisterResponse;
+import com.elderhive.dtos.Authentication.ResetPasswordRequest;
 import com.elderhive.exceptions.GenericException;
 import com.elderhive.payload.ApiResponse;
 import com.elderhive.payload.ResponseModel;
@@ -91,6 +92,13 @@ public class AuthController {
     public ResponseEntity<ResponseModel<String>> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
         String message = authService.forgotPassword(request);
         return ApiResponse.successResponse(message, message);
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<ResponseModel<String>> resetPassword(@Valid @RequestBody ResetPasswordRequest request)
+            throws GenericException {
+        String message = authService.resetPassword(request);
+        return ApiResponse.successResponse(message, "Password reset successfully");
     }
 
     private String extractCookieValue(HttpServletRequest request, String name) {
