@@ -31,6 +31,11 @@ public enum ExceptionCodeEnum {
     TOKEN_EXPIRED("TOKEN_EXPIRED"),
     TOKEN_INVALID("TOKEN_INVALID"),
     FORBIDDEN("FORBIDDEN"),
+    // Login succeeds credential-wise but the account itself is INACTIVE/SUSPENDED (e.g.
+    // Prompt 93's admin user-suspension feature) — not explicitly asked for by Prompt 16,
+    // but UserStatusEnum already models this and leaving it unenforced at login would be
+    // a dormant bug the moment an admin can actually suspend someone.
+    ACCOUNT_NOT_ACTIVE("ACCOUNT_NOT_ACTIVE"),
 
     // ==== USER ====
     USER_NOT_FOUND("USER_NOT_FOUND"),

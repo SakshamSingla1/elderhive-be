@@ -37,7 +37,8 @@ public class GlobalExceptionHandler {
             ExceptionCodeEnum.UNAUTHORIZED,
             ExceptionCodeEnum.INVALID_CREDENTIALS,
             ExceptionCodeEnum.TOKEN_EXPIRED,
-            ExceptionCodeEnum.TOKEN_INVALID
+            ExceptionCodeEnum.TOKEN_INVALID,
+            ExceptionCodeEnum.ACCOUNT_NOT_ACTIVE
     );
 
     private static final Set<ExceptionCodeEnum> BAD_REQUEST_CODES = Set.of(

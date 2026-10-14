@@ -1,5 +1,7 @@
 package com.elderhive.services.impl;
 
+import com.elderhive.dtos.Authentication.LoginRequest;
+import com.elderhive.dtos.Authentication.LoginResult;
 import com.elderhive.dtos.Authentication.RegisterRequest;
 import com.elderhive.dtos.Authentication.RegisterResponse;
 import com.elderhive.entities.User;
@@ -10,12 +12,15 @@ import com.elderhive.enums.UserTypeEnum;
 import com.elderhive.exceptions.GenericException;
 import com.elderhive.repositories.UserRepository;
 import com.elderhive.repositories.UserRoleMappingRepository;
+import com.elderhive.security.JwtUtil;
 import com.elderhive.services.AuthService;
+import com.elderhive.services.RefreshTokenService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Set;
 
 @Service
@@ -32,6 +37,8 @@ public class AuthServiceImpl implements AuthService {
     private final UserRepository userRepository;
     private final UserRoleMappingRepository userRoleMappingRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JwtUtil jwtUtil;
+    private final RefreshTokenService refreshTokenService;
 
     @Override
     @Transactional
@@ -76,6 +83,40 @@ public class AuthServiceImpl implements AuthService {
                 .fullName(user.getFullName())
                 .userType(user.getUserType())
                 .status(user.getStatus())
+                .build();
+    }
+
+    @Override
+    public LoginResult login(LoginRequest request) throws GenericException {
+        // Same exception (code + message) for "no such email" and "wrong password" —
+        // deliberately not distinguishing which one failed, so this endpoint can't be
+        // used to enumerate which emails have accounts.
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new GenericException(ExceptionCodeEnum.INVALID_CREDENTIALS, "Invalid email or password."));
+
+        if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+            throw new GenericException(ExceptionCodeEnum.INVALID_CREDENTIALS, "Invalid email or password.");
+        }
+
+        if (user.getStatus() != UserStatusEnum.ACTIVE) {
+            throw new GenericException(ExceptionCodeEnum.ACCOUNT_NOT_ACTIVE,
+                    "This account is not active. Contact support for help.");
+        }
+
+        String accessToken = jwtUtil.generateAccessToken(user.getEmail(), user.getId(), user.getUserType().name());
+        String refreshToken = refreshTokenService.issue(user);
+
+        List<UserTypeEnum> roles = userRoleMappingRepository.findByUserId(user.getId()).stream()
+                .map(UserRoleMapping::getUserType)
+                .toList();
+
+        return LoginResult.builder()
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
+                .id(user.getId())
+                .email(user.getEmail())
+                .userType(user.getUserType())
+                .roles(roles)
                 .build();
     }
 }

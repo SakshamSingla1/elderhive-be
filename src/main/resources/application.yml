@@ -64,6 +64,12 @@ app:
     url: ${APP_FRONTEND_URL:http://localhost:5173}
   mail:
     from: ${MAIL_FROM_ADDRESS:no-reply@elderhive.app}
+  cookie:
+    # false in local dev (plain http://localhost) since a Secure cookie is never sent
+    # back by the browser over plain HTTP - would silently break login locally if this
+    # were hardcoded true the way ElderSphere's AuthController does. Every real
+    # deployment MUST set COOKIE_SECURE=true (served over HTTPS).
+    secure: ${COOKIE_SECURE:false}
 
 jwt:
   # dev-only fallback so the app boots with zero setup locally - every other environment MUST
