@@ -103,6 +103,26 @@ public class ColorThemeServiceImpl implements ColorThemeService {
                         "No active default theme found"));
     }
 
+    /**
+     * <b>Design decision: deleting a theme users are actively on is ALLOWED, not blocked</b>
+     * — deliberately, not by oversight. The alternative (reject the delete while
+     * {@code countUsersByThemeId(id) > 0}) would force an admin pruning the catalog to
+     * first go hunt down and reassign every affected user before they're allowed to
+     * remove a theme nobody should be using anymore; this way, nobody is ever left on a
+     * dangling reference or sees an error.
+     *
+     * <p>No extra code makes this work — it falls out of two independently-built pieces
+     * actually composing correctly: {@code user_theme_mappings.theme_id} is
+     * {@code ON DELETE CASCADE} (V10 migration, Prompt 41), so deleting the row here
+     * silently removes every UserThemeMapping that pointed at it; and
+     * UserThemeService#getThemeByUserId already treats "no mapping" as "use the default
+     * theme," not an error (Prompt 44) — so a user whose chosen theme vanished out from
+     * under them transparently resolves to the current default on their very next read,
+     * with no 404 and no stale state. Verified end-to-end (real HTTP, real cascade, real
+     * cache eviction) by ColorThemeDeletionFallbackIntegrationTest — including the
+     * trickier case of deleting the theme that IS the currently-cached default, which is
+     * exactly why both @CacheEvicts below still matter here.
+     */
     @Override
     @Caching(evict = {
             @CacheEvict(cacheNames = "colorThemeDefault", allEntries = true),
