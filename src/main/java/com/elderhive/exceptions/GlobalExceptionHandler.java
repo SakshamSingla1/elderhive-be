@@ -52,12 +52,14 @@ public class GlobalExceptionHandler {
 
     private static final Set<ExceptionCodeEnum> CONFLICT_CODES = Set.of(
             ExceptionCodeEnum.CONFLICT,
-            ExceptionCodeEnum.DUPLICATE_EMAIL
+            ExceptionCodeEnum.DUPLICATE_EMAIL,
+            ExceptionCodeEnum.COLOR_THEME_ALREADY_EXISTS
     );
 
     private static final Set<ExceptionCodeEnum> NOT_FOUND_CODES = Set.of(
             ExceptionCodeEnum.USER_NOT_FOUND,
-            ExceptionCodeEnum.DATA_NOT_FOUND
+            ExceptionCodeEnum.DATA_NOT_FOUND,
+            ExceptionCodeEnum.COLOR_THEME_NOT_FOUND
     );
 
     @ExceptionHandler(GenericException.class)
