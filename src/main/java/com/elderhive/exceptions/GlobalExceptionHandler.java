@@ -59,7 +59,8 @@ public class GlobalExceptionHandler {
     private static final Set<ExceptionCodeEnum> NOT_FOUND_CODES = Set.of(
             ExceptionCodeEnum.USER_NOT_FOUND,
             ExceptionCodeEnum.DATA_NOT_FOUND,
-            ExceptionCodeEnum.COLOR_THEME_NOT_FOUND
+            ExceptionCodeEnum.COLOR_THEME_NOT_FOUND,
+            ExceptionCodeEnum.NOTIFICATION_TEMPLATE_NOT_FOUND
     );
 
     @ExceptionHandler(GenericException.class)

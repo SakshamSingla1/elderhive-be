@@ -51,7 +51,15 @@ public enum ExceptionCodeEnum {
 
     // ==== COLOR THEME ====
     COLOR_THEME_ALREADY_EXISTS("COLOR_THEME_ALREADY_EXISTS"),
-    COLOR_THEME_NOT_FOUND("COLOR_THEME_NOT_FOUND");
+    COLOR_THEME_NOT_FOUND("COLOR_THEME_NOT_FOUND"),
+
+    // ==== NOTIFICATION ====
+    NOTIFICATION_TEMPLATE_NOT_FOUND("NOTIFICATION_TEMPLATE_NOT_FOUND"),
+    // Deliberately NOT registered in any of GlobalExceptionHandler's four buckets — an
+    // unresolved {{placeholder}} means a later phase's calling code forgot to supply a
+    // variable the template requires, a programmer bug, not a user-facing 400. Falls
+    // through resolveStatus's default to 500, which is the correct signal for it.
+    NOTIFICATION_TEMPLATE_PLACEHOLDER_UNRESOLVED("NOTIFICATION_TEMPLATE_PLACEHOLDER_UNRESOLVED");
 
     private final String value;
 
