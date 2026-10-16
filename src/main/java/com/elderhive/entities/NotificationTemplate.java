@@ -1,8 +1,11 @@
 package com.elderhive.entities;
 
 import com.elderhive.audit.Auditable;
+import com.elderhive.enums.NotificationTypeEnum;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -29,6 +32,16 @@ import lombok.NoArgsConstructor;
  * <p>No column enforces well-formed {{placeholder}} syntax in subject/messageBody — that's
  * TemplateRenderer's job at render time (Prompt 52), including catching a template that
  * references a placeholder no caller ever supplies a value for.
+ *
+ * <p><b>{@code type} (added Prompt 58)</b> is the NotificationTypeEnum category
+ * NotificationService consults against a target user's NotificationPreference row —
+ * deliberately a real column set when the template is created, not inferred by parsing the
+ * templateKey string (e.g. a naive "prefix before the first underscore" convention happens
+ * to work for BOOKING_CONFIRMED/EMERGENCY_ALERT_FAMILY but silently breaks for a key like
+ * OTP_CODE, which is ACCOUNT-typed but has no "OTP" enum value to parse out). A later admin
+ * CRUD surface over this entity (Prompt 237) lists subject/body/channel-flags as the
+ * editable fields — type is categorization fixed at creation, not something that gets
+ * casually re-edited alongside copy changes.
  */
 @Entity
 @Table(name = "notification_templates")
@@ -45,6 +58,10 @@ public class NotificationTemplate extends Auditable {
 
     @Column(name = "template_key", unique = true, nullable = false)
     private String templateKey;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private NotificationTypeEnum type;
 
     private String subject;
 

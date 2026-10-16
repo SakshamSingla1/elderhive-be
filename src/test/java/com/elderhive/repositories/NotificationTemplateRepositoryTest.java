@@ -2,6 +2,7 @@ package com.elderhive.repositories;
 
 import com.elderhive.entities.NotificationTemplate;
 import com.elderhive.entities.NotificationTemplateVariables;
+import com.elderhive.enums.NotificationTypeEnum;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,6 +35,7 @@ class NotificationTemplateRepositoryTest {
     private NotificationTemplate persistTemplate(String templateKey) {
         return notificationTemplateRepository.save(NotificationTemplate.builder()
                 .templateKey(templateKey)
+                .type(NotificationTypeEnum.ACCOUNT)
                 .subject("Hi {{name}}")
                 .messageBody("Hello {{name}}, welcome!")
                 .isInApp(true)
@@ -50,6 +52,7 @@ class NotificationTemplateRepositoryTest {
         NotificationTemplate reloaded = notificationTemplateRepository.findById(saved.getId()).orElseThrow();
 
         assertThat(reloaded.getTemplateKey()).isEqualTo("round-trip-template");
+        assertThat(reloaded.getType()).isEqualTo(NotificationTypeEnum.ACCOUNT);
         assertThat(reloaded.getSubject()).isEqualTo("Hi {{name}}");
         assertThat(reloaded.getMessageBody()).isEqualTo("Hello {{name}}, welcome!");
         assertThat(reloaded.isInApp()).isTrue();
@@ -74,7 +77,8 @@ class NotificationTemplateRepositoryTest {
         persistTemplate("duplicate-key");
 
         assertThatThrownBy(() -> {
-            notificationTemplateRepository.save(NotificationTemplate.builder().templateKey("duplicate-key").build());
+            notificationTemplateRepository.save(NotificationTemplate.builder()
+                    .templateKey("duplicate-key").type(NotificationTypeEnum.ACCOUNT).build());
             notificationTemplateRepository.flush();
         }).isInstanceOf(DataIntegrityViolationException.class);
     }

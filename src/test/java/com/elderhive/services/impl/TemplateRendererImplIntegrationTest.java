@@ -2,6 +2,7 @@ package com.elderhive.services.impl;
 
 import com.elderhive.entities.NotificationTemplate;
 import com.elderhive.enums.ExceptionCodeEnum;
+import com.elderhive.enums.NotificationTypeEnum;
 import com.elderhive.exceptions.GenericException;
 import com.elderhive.repositories.NotificationTemplateRepository;
 import com.elderhive.services.RenderedNotification;
@@ -36,6 +37,7 @@ class TemplateRendererImplIntegrationTest {
     void rendersARealPersistedTemplateEndToEnd() throws GenericException {
         notificationTemplateRepository.save(NotificationTemplate.builder()
                 .templateKey("integration.booking-confirmed")
+                .type(NotificationTypeEnum.BOOKING)
                 .subject("Booking confirmed with {{caretakerName}}")
                 .messageBody("Hi {{elderName}}, {{caretakerName}} will visit on {{date}}.")
                 .isInApp(true)
