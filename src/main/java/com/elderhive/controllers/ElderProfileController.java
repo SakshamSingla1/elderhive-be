@@ -2,6 +2,8 @@ package com.elderhive.controllers;
 
 import com.elderhive.dtos.ElderProfile.ElderProfileRequest;
 import com.elderhive.dtos.ElderProfile.ElderProfileResponse;
+import com.elderhive.dtos.FamilyElderLink.FamilyElderLinkRequest;
+import com.elderhive.dtos.FamilyElderLink.FamilyMemberSummaryResponse;
 import com.elderhive.entities.User;
 import com.elderhive.enums.ExceptionCodeEnum;
 import com.elderhive.enums.UserTypeEnum;
@@ -10,6 +12,7 @@ import com.elderhive.payload.ApiResponse;
 import com.elderhive.payload.ResponseModel;
 import com.elderhive.repositories.UserRepository;
 import com.elderhive.services.ElderProfileService;
+import com.elderhive.services.FamilyElderLinkService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -46,6 +49,7 @@ public class ElderProfileController {
     private static final Set<UserTypeEnum> ADMIN_TIER = EnumSet.of(UserTypeEnum.ADMIN, UserTypeEnum.SUPER_ADMIN);
 
     private final ElderProfileService elderProfileService;
+    private final FamilyElderLinkService familyElderLinkService;
     private final UserRepository userRepository;
 
     @PreAuthorize("isAuthenticated()")
@@ -65,7 +69,7 @@ public class ElderProfileController {
                 "Elder profile fetched successfully");
     }
 
-    // Family members (and caretakers) see only their own; ADMIN/SUPER_ADMIN see every profile.
+    // Family members (and caretakers) see their own + co-managed (Prompt 62); ADMIN/SUPER_ADMIN see every profile.
     @PreAuthorize("isAuthenticated()")
     @GetMapping
     public ResponseEntity<ResponseModel<Page<ElderProfileResponse>>> getMine(Pageable pageable) throws GenericException {
@@ -98,6 +102,45 @@ public class ElderProfileController {
         User caller = currentUser();
         elderProfileService.delete(id, caller);
         return ApiResponse.successResponse("Deleted", "Elder profile deleted successfully");
+    }
+
+    /**
+     * Owner (or ADMIN/SUPER_ADMIN) adds an additional co-managing family member — there's no
+     * invite-acceptance step yet (Prompt 63), so this adds the link directly.
+     */
+    @PreAuthorize("isAuthenticated()")
+    @PostMapping("/{id}/family-members")
+    public ResponseEntity<ResponseModel<FamilyMemberSummaryResponse>> addFamilyMember(
+            @PathVariable Long id, @Valid @RequestBody FamilyElderLinkRequest request) throws GenericException {
+        User caller = currentUser();
+        return ApiResponse.createSuccess(familyElderLinkService.addFamilyMember(id, request, caller),
+                "Family member added successfully");
+    }
+
+    /**
+     * Owner, a co-managing family member, the linked elder, or an ADMIN/SUPER_ADMIN may view
+     * who manages this profile — getById's own access check is reused here as a pre-check
+     * since FamilyElderLinkService#findAllByElderProfileId itself intentionally performs none
+     * (Phase 11's emergency fan-out calls that method directly, with no HTTP caller at all).
+     */
+    @PreAuthorize("isAuthenticated()")
+    @GetMapping("/{id}/family-members")
+    public ResponseEntity<ResponseModel<List<FamilyMemberSummaryResponse>>> getFamilyMembers(@PathVariable Long id)
+            throws GenericException {
+        User caller = currentUser();
+        elderProfileService.getById(id, caller);
+        return ApiResponse.successResponse(familyElderLinkService.findAllByElderProfileId(id),
+                "Family members fetched successfully");
+    }
+
+    /** Owner (or ADMIN/SUPER_ADMIN) only. Never removes the original owner — there's no link row for them. */
+    @PreAuthorize("isAuthenticated()")
+    @DeleteMapping("/{id}/family-members/{userId}")
+    public ResponseEntity<ResponseModel<String>> removeFamilyMember(@PathVariable Long id, @PathVariable Long userId)
+            throws GenericException {
+        User caller = currentUser();
+        familyElderLinkService.removeFamilyMember(id, userId, caller);
+        return ApiResponse.successResponse("Removed", "Family member removed successfully");
     }
 
     /**

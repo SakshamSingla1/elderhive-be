@@ -106,7 +106,12 @@ public class NotificationServiceImpl implements NotificationService {
             webPushSenderService.sendToUser(notification, targetUserId);
         }
 
-        messagingTemplate.convertAndSend("/topic/notifications/" + targetUserId, notification);
+        // Broadcasts the mapped DTO, not the raw entity - matches every other controller's
+        // own "never serialize an entity directly" convention, and (not just cosmetic)
+        // NotificationResponse.isRead carries the @JsonProperty pin its own javadoc explains;
+        // the bare entity's isRead getter would otherwise serialize as "read", which
+        // NotificationBell.tsx's live-push handler silently reads as always-undefined.
+        messagingTemplate.convertAndSend("/topic/notifications/" + targetUserId, mapToResponse(notification));
     }
 
     @Override

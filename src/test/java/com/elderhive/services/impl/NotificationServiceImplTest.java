@@ -198,16 +198,20 @@ class NotificationServiceImplTest {
     }
 
     @Test
-    void broadcastsTheSavedNotificationOverItsOwnTopic() throws GenericException {
+    void broadcastsTheSavedNotificationAsAMappedDtoOverItsOwnTopic() throws GenericException {
         stubCommon(template(NotificationTypeEnum.SYSTEM, false, false, false));
         when(notificationPreferenceRepository.findByUserIdAndType(USER_ID, NotificationTypeEnum.SYSTEM))
                 .thenReturn(Optional.empty());
 
         notificationService.send("key", Map.of(), USER_ID);
 
-        ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
+        // The raw entity is never broadcast directly (see the production code's own
+        // comment) - a mapped NotificationResponse is, so its isRead field actually
+        // serializes as "isRead" rather than "read".
+        ArgumentCaptor<NotificationResponse> captor = ArgumentCaptor.forClass(NotificationResponse.class);
         verify(messagingTemplate, times(1)).convertAndSend(eq("/topic/notifications/" + USER_ID), captor.capture());
         assertThat(captor.getValue().getId()).isEqualTo(100L);
+        assertThat(captor.getValue().isRead()).isFalse();
     }
 
     @Test

@@ -9,6 +9,7 @@ import com.elderhive.enums.UserStatusEnum;
 import com.elderhive.enums.UserTypeEnum;
 import com.elderhive.exceptions.GenericException;
 import com.elderhive.repositories.ElderProfileRepository;
+import com.elderhive.repositories.FamilyElderLinkRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -25,6 +26,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -38,6 +40,9 @@ class ElderProfileServiceImplTest {
 
     @Mock
     private ElderProfileRepository elderProfileRepository;
+
+    @Mock
+    private FamilyElderLinkRepository familyElderLinkRepository;
 
     @InjectMocks
     private ElderProfileServiceImpl elderProfileService;
@@ -105,6 +110,22 @@ class ElderProfileServiceImplTest {
     }
 
     @Test
+    void aCoManagingFamilyMemberCanGetUpdateAndDelete() throws GenericException {
+        ElderProfile profile = profile(FAMILY_USER_ID, null);
+        Long coManagerId = 40L;
+        when(elderProfileRepository.findById(1L)).thenReturn(Optional.of(profile));
+        when(elderProfileRepository.save(any())).thenReturn(profile);
+        when(familyElderLinkRepository.existsByElderProfileIdAndFamilyUserId(1L, coManagerId)).thenReturn(true);
+        User caller = user(coManagerId, UserTypeEnum.FAMILY_MEMBER);
+
+        assertThat(elderProfileService.getById(1L, caller).getId()).isEqualTo(1L);
+        elderProfileService.update(1L, request("Updated Name"), caller);
+        elderProfileService.delete(1L, caller);
+
+        verify(elderProfileRepository, times(1)).deleteById(1L);
+    }
+
+    @Test
     void anAdminCanAccessAnyProfileRegardlessOfOwnership() throws GenericException {
         ElderProfile profile = profile(FAMILY_USER_ID, ELDER_USER_ID);
         when(elderProfileRepository.findById(1L)).thenReturn(Optional.of(profile));
@@ -147,13 +168,24 @@ class ElderProfileServiceImplTest {
     }
 
     @Test
-    void getByFamilyUserIdListReturnsOnlyThatFamilysProfiles() {
-        when(elderProfileRepository.findByFamilyUserId(FAMILY_USER_ID))
+    void getByFamilyUserIdListReturnsOwnedAndCoManagedProfiles() {
+        when(elderProfileRepository.findOwnedOrCoManagedByFamilyUserId(FAMILY_USER_ID))
                 .thenReturn(List.of(profile(FAMILY_USER_ID, null)));
 
         List<ElderProfileResponse> results = elderProfileService.getByFamilyUserId(FAMILY_USER_ID);
 
         assertThat(results).hasSize(1);
+    }
+
+    @Test
+    void getByFamilyUserIdPagedReturnsOwnedAndCoManagedProfiles() {
+        Page<ElderProfile> page = new PageImpl<>(List.of(profile(FAMILY_USER_ID, null)));
+        when(elderProfileRepository.findOwnedOrCoManagedByFamilyUserId(eq(FAMILY_USER_ID), any(PageRequest.class)))
+                .thenReturn(page);
+
+        Page<ElderProfileResponse> results = elderProfileService.getByFamilyUserId(FAMILY_USER_ID, PageRequest.of(0, 10));
+
+        assertThat(results.getContent()).hasSize(1);
     }
 
     @Test

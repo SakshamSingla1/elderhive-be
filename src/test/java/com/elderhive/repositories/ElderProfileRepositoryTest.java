@@ -1,6 +1,7 @@
 package com.elderhive.repositories;
 
 import com.elderhive.entities.ElderProfile;
+import com.elderhive.entities.FamilyElderLink;
 import com.elderhive.entities.User;
 import com.elderhive.enums.GenderEnum;
 import com.elderhive.enums.UserStatusEnum;
@@ -31,6 +32,9 @@ class ElderProfileRepositoryTest {
 
     @Autowired
     private ElderProfileRepository elderProfileRepository;
+
+    @Autowired
+    private FamilyElderLinkRepository familyElderLinkRepository;
 
     @Autowired
     private UserRepository userRepository;
@@ -100,6 +104,25 @@ class ElderProfileRepositoryTest {
 
         assertThat(page.getTotalElements()).isEqualTo(1);
         assertThat(page.getContent().get(0).getFullName()).isEqualTo("Elder A");
+    }
+
+    @Test
+    void findOwnedOrCoManagedByFamilyUserIdIncludesBothOwnedAndCoManagedProfilesWithNoDuplicates() {
+        User owner = persistUser("ep-merge-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
+        User coManager = persistUser("ep-merge-comanager@example.com", UserTypeEnum.FAMILY_MEMBER);
+        User unrelated = persistUser("ep-merge-unrelated@example.com", UserTypeEnum.FAMILY_MEMBER);
+        ElderProfile owned = elderProfileRepository.save(ElderProfile.builder().familyUserId(owner.getId()).fullName("Owned").build());
+        ElderProfile coManaged = elderProfileRepository.save(ElderProfile.builder().familyUserId(unrelated.getId()).fullName("Co-Managed").build());
+        elderProfileRepository.save(ElderProfile.builder().familyUserId(unrelated.getId()).fullName("Unrelated").build());
+        familyElderLinkRepository.save(FamilyElderLink.builder().elderProfileId(coManaged.getId()).familyUserId(coManager.getId()).build());
+        entityManager.flush();
+
+        List<ElderProfile> list = elderProfileRepository.findOwnedOrCoManagedByFamilyUserId(coManager.getId());
+        assertThat(list).extracting(ElderProfile::getFullName).containsExactly("Co-Managed");
+
+        var page = elderProfileRepository.findOwnedOrCoManagedByFamilyUserId(owner.getId(), PageRequest.of(0, 10));
+        assertThat(page.getTotalElements()).isEqualTo(1);
+        assertThat(page.getContent().get(0).getFullName()).isEqualTo("Owned");
     }
 
     @Test

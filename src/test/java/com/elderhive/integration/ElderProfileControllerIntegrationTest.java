@@ -202,4 +202,125 @@ class ElderProfileControllerIntegrationTest {
                         .contentType("application/json").content("{}"))
                 .andExpect(status().isBadRequest());
     }
+
+    // ==== FamilyElderLink (Prompt 62) ====
+
+    private Long createProfile(Cookie ownerCookie, String fullName) throws Exception {
+        MvcResult result = mockMvc.perform(post("/api/v1/elder-profiles").cookie(ownerCookie)
+                        .contentType("application/json").content(profileJson(fullName)))
+                .andReturn();
+        return objectMapper.readTree(result.getResponse().getContentAsString()).get("data").get("id").asLong();
+    }
+
+    @Test
+    void theOwnerCanAddACoManagingFamilyMemberAndThatMemberCanThenAccessTheProfile() throws Exception {
+        User owner = persistUser("fel-add-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
+        User coManager = persistUser("fel-add-comanager@example.com", UserTypeEnum.FAMILY_MEMBER);
+        Long id = createProfile(loginCookieFor(owner), "Shared Elder");
+
+        mockMvc.perform(post("/api/v1/elder-profiles/" + id + "/family-members").cookie(loginCookieFor(owner))
+                        .contentType("application/json")
+                        .content("{\"familyUserId\":%d,\"relationshipLabel\":\"Son\"}".formatted(coManager.getId())))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.relationshipLabel").value("Son"))
+                .andExpect(jsonPath("$.data.isOwner").value(false));
+
+        // Was a stranger before being linked - now has full standing on the profile.
+        mockMvc.perform(get("/api/v1/elder-profiles/" + id).cookie(loginCookieFor(coManager)))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/elder-profiles").cookie(loginCookieFor(coManager)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content.length()").value(1))
+                .andExpect(jsonPath("$.data.content[0].fullName").value("Shared Elder"));
+    }
+
+    @Test
+    void getFamilyMembersListsTheOwnerAndEveryCoManager() throws Exception {
+        User owner = persistUser("fel-list-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
+        User coManager = persistUser("fel-list-comanager@example.com", UserTypeEnum.FAMILY_MEMBER);
+        Long id = createProfile(loginCookieFor(owner), "Elder");
+        mockMvc.perform(post("/api/v1/elder-profiles/" + id + "/family-members").cookie(loginCookieFor(owner))
+                .contentType("application/json")
+                .content("{\"familyUserId\":%d,\"relationshipLabel\":\"Niece\"}".formatted(coManager.getId())));
+
+        mockMvc.perform(get("/api/v1/elder-profiles/" + id + "/family-members").cookie(loginCookieFor(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(2))
+                .andExpect(jsonPath("$.data[0].isOwner").value(true))
+                .andExpect(jsonPath("$.data[0].userId").value(owner.getId()))
+                .andExpect(jsonPath("$.data[1].userId").value(coManager.getId()))
+                .andExpect(jsonPath("$.data[1].relationshipLabel").value("Niece"));
+    }
+
+    @Test
+    void aStrangerCannotAddOrViewOrRemoveFamilyMembers() throws Exception {
+        User owner = persistUser("fel-stranger-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
+        User stranger = persistUser("fel-stranger-stranger@example.com", UserTypeEnum.FAMILY_MEMBER);
+        User target = persistUser("fel-stranger-target@example.com", UserTypeEnum.FAMILY_MEMBER);
+        Long id = createProfile(loginCookieFor(owner), "Elder");
+
+        mockMvc.perform(post("/api/v1/elder-profiles/" + id + "/family-members").cookie(loginCookieFor(stranger))
+                        .contentType("application/json")
+                        .content("{\"familyUserId\":%d}".formatted(target.getId())))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/elder-profiles/" + id + "/family-members").cookie(loginCookieFor(stranger)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void addingANonFamilyMemberAccountReturns400BadRequestViaInvalidRole() throws Exception {
+        User owner = persistUser("fel-invalidrole-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
+        User caretaker = persistUser("fel-invalidrole-caretaker@example.com", UserTypeEnum.CARETAKER);
+        Long id = createProfile(loginCookieFor(owner), "Elder");
+
+        mockMvc.perform(post("/api/v1/elder-profiles/" + id + "/family-members").cookie(loginCookieFor(owner))
+                        .contentType("application/json")
+                        .content("{\"familyUserId\":%d}".formatted(caretaker.getId())))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void addingTheSameCoManagerTwiceOrTheOwnerThemselvesConflicts() throws Exception {
+        User owner = persistUser("fel-conflict-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
+        User coManager = persistUser("fel-conflict-comanager@example.com", UserTypeEnum.FAMILY_MEMBER);
+        Long id = createProfile(loginCookieFor(owner), "Elder");
+        Cookie ownerCookie = loginCookieFor(owner);
+
+        mockMvc.perform(post("/api/v1/elder-profiles/" + id + "/family-members").cookie(ownerCookie)
+                .contentType("application/json").content("{\"familyUserId\":%d}".formatted(coManager.getId())));
+
+        mockMvc.perform(post("/api/v1/elder-profiles/" + id + "/family-members").cookie(ownerCookie)
+                        .contentType("application/json").content("{\"familyUserId\":%d}".formatted(coManager.getId())))
+                .andExpect(status().isConflict());
+        mockMvc.perform(post("/api/v1/elder-profiles/" + id + "/family-members").cookie(ownerCookie)
+                        .contentType("application/json").content("{\"familyUserId\":%d}".formatted(owner.getId())))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void theOwnerCanRemoveACoManagerWhoThenLosesAccess() throws Exception {
+        User owner = persistUser("fel-remove-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
+        User coManager = persistUser("fel-remove-comanager@example.com", UserTypeEnum.FAMILY_MEMBER);
+        Long id = createProfile(loginCookieFor(owner), "Elder");
+        Cookie ownerCookie = loginCookieFor(owner);
+        mockMvc.perform(post("/api/v1/elder-profiles/" + id + "/family-members").cookie(ownerCookie)
+                .contentType("application/json").content("{\"familyUserId\":%d}".formatted(coManager.getId())));
+
+        mockMvc.perform(delete("/api/v1/elder-profiles/" + id + "/family-members/" + coManager.getId()).cookie(ownerCookie))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/elder-profiles/" + id).cookie(loginCookieFor(coManager)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void removingAUserWhoIsNotLinkedReturns404() throws Exception {
+        User owner = persistUser("fel-remove-404-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
+        User notLinked = persistUser("fel-remove-404-notlinked@example.com", UserTypeEnum.FAMILY_MEMBER);
+        Long id = createProfile(loginCookieFor(owner), "Elder");
+
+        mockMvc.perform(delete("/api/v1/elder-profiles/" + id + "/family-members/" + notLinked.getId())
+                        .cookie(loginCookieFor(owner)))
+                .andExpect(status().isNotFound());
+    }
 }
