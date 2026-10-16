@@ -20,7 +20,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -135,5 +138,98 @@ class NotificationControllerIntegrationTest {
                         .contentType("application/json")
                         .content("{\"templateKey\":\"BOOKING_CONFIRMED\",\"targetUserId\":1}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    // ==== GET / PUT - the caller's own inbox ====
+
+    @Test
+    void aUserSeesOnlyTheirOwnNotificationsNewestFirst() throws Exception {
+        User superAdmin = persistUser("notif-inbox-sender@example.com", UserTypeEnum.SUPER_ADMIN);
+        User self = persistUser("notif-inbox-self@example.com", UserTypeEnum.ELDER);
+        User other = persistUser("notif-inbox-other@example.com", UserTypeEnum.ELDER);
+        Cookie superAdminCookie = loginCookieFor(superAdmin);
+
+        mockMvc.perform(post("/api/v1/notifications/test").cookie(superAdminCookie).contentType("application/json")
+                .content(testRequestJson("BOOKING_CONFIRMED", other.getId(), Map.of(
+                        "elderName", "X", "serviceName", "Y", "bookingDate", "Z"))));
+        mockMvc.perform(post("/api/v1/notifications/test").cookie(superAdminCookie).contentType("application/json")
+                .content(testRequestJson("BOOKING_CONFIRMED", self.getId(), Map.of(
+                        "elderName", "Robert", "serviceName", "Visit", "bookingDate", "Oct 20"))));
+
+        mockMvc.perform(get("/api/v1/notifications").cookie(loginCookieFor(self)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content.length()").value(1))
+                .andExpect(jsonPath("$.data.content[0].title").value("Booking confirmed"));
+    }
+
+    @Test
+    void unreadCountReflectsOnlyUnreadNotificationsForTheCaller() throws Exception {
+        User superAdmin = persistUser("notif-unread-sender@example.com", UserTypeEnum.SUPER_ADMIN);
+        User self = persistUser("notif-unread-self@example.com", UserTypeEnum.ELDER);
+        Cookie superAdminCookie = loginCookieFor(superAdmin);
+        Cookie selfCookie = loginCookieFor(self);
+
+        mockMvc.perform(post("/api/v1/notifications/test").cookie(superAdminCookie).contentType("application/json")
+                .content(testRequestJson("BOOKING_CONFIRMED", self.getId(), Map.of(
+                        "elderName", "A", "serviceName", "B", "bookingDate", "C"))));
+
+        mockMvc.perform(get("/api/v1/notifications/unread-count").cookie(selfCookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value(1));
+
+        Notification notification = notificationRepository.findByUserIdOrderByCreatedAtDesc(
+                self.getId(), PageRequest.of(0, 10)).getContent().get(0);
+        mockMvc.perform(put("/api/v1/notifications/" + notification.getId() + "/read").cookie(selfCookie))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/notifications/unread-count").cookie(selfCookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value(0));
+    }
+
+    @Test
+    void markingAnotherUsersNotificationAsReadReturns404() throws Exception {
+        User superAdmin = persistUser("notif-mark-sender@example.com", UserTypeEnum.SUPER_ADMIN);
+        User owner = persistUser("notif-mark-owner@example.com", UserTypeEnum.ELDER);
+        User intruder = persistUser("notif-mark-intruder@example.com", UserTypeEnum.ELDER);
+        Cookie superAdminCookie = loginCookieFor(superAdmin);
+
+        mockMvc.perform(post("/api/v1/notifications/test").cookie(superAdminCookie).contentType("application/json")
+                .content(testRequestJson("BOOKING_CONFIRMED", owner.getId(), Map.of(
+                        "elderName", "A", "serviceName", "B", "bookingDate", "C"))));
+        Notification notification = notificationRepository.findByUserIdOrderByCreatedAtDesc(
+                owner.getId(), PageRequest.of(0, 10)).getContent().get(0);
+
+        mockMvc.perform(put("/api/v1/notifications/" + notification.getId() + "/read")
+                        .cookie(loginCookieFor(intruder)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void markAllAsReadFlipsEveryUnreadNotificationForTheCaller() throws Exception {
+        User superAdmin = persistUser("notif-markall-sender@example.com", UserTypeEnum.SUPER_ADMIN);
+        User self = persistUser("notif-markall-self@example.com", UserTypeEnum.ELDER);
+        Cookie superAdminCookie = loginCookieFor(superAdmin);
+        Cookie selfCookie = loginCookieFor(self);
+
+        mockMvc.perform(post("/api/v1/notifications/test").cookie(superAdminCookie).contentType("application/json")
+                .content(testRequestJson("BOOKING_CONFIRMED", self.getId(), Map.of(
+                        "elderName", "A", "serviceName", "B", "bookingDate", "C"))));
+        mockMvc.perform(post("/api/v1/notifications/test").cookie(superAdminCookie).contentType("application/json")
+                .content(testRequestJson("BOOKING_CANCELLED", self.getId(), Map.of(
+                        "elderName", "A", "serviceName", "B", "bookingDate", "C"))));
+
+        mockMvc.perform(put("/api/v1/notifications/read-all").cookie(selfCookie))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/notifications/unread-count").cookie(selfCookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value(0));
+    }
+
+    @Test
+    void anUnauthenticatedCallerCannotReadTheInbox() throws Exception {
+        mockMvc.perform(get("/api/v1/notifications"))
+                .andExpect(status().isUnauthorized());
     }
 }

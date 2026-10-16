@@ -19,14 +19,19 @@ import com.elderhive.repositories.UserRepository;
 import com.elderhive.services.RenderedNotification;
 import com.elderhive.services.TemplateRenderer;
 import com.elderhive.webpush.WebPushSenderService;
+import com.elderhive.dtos.Notification.NotificationResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -230,5 +235,99 @@ class NotificationServiceImplTest {
 
         verify(notificationRepository, never()).save(any());
         verify(notificationDeliveryLogRepository, never()).save(any());
+    }
+
+    @Test
+    void getByUserMapsEveryEntityFieldOntoTheResponse() {
+        Notification notification = Notification.builder()
+                .id(5L).userId(USER_ID).type(NotificationTypeEnum.SYSTEM)
+                .title("Title").message("Message").link("/somewhere").isRead(true).build();
+        Page<Notification> page = new PageImpl<>(List.of(notification));
+        when(notificationRepository.findByUserIdOrderByCreatedAtDesc(eq(USER_ID), any())).thenReturn(page);
+
+        Page<NotificationResponse> result = notificationService.getByUser(USER_ID, PageRequest.of(0, 10));
+
+        assertThat(result.getContent()).hasSize(1);
+        NotificationResponse response = result.getContent().get(0);
+        assertThat(response.getId()).isEqualTo(5L);
+        assertThat(response.getType()).isEqualTo(NotificationTypeEnum.SYSTEM);
+        assertThat(response.getTitle()).isEqualTo("Title");
+        assertThat(response.getMessage()).isEqualTo("Message");
+        assertThat(response.getLink()).isEqualTo("/somewhere");
+        assertThat(response.isRead()).isTrue();
+    }
+
+    @Test
+    void getUnreadCountDelegatesStraightToTheRepository() {
+        when(notificationRepository.countByUserIdAndIsReadFalse(USER_ID)).thenReturn(3L);
+
+        assertThat(notificationService.getUnreadCount(USER_ID)).isEqualTo(3L);
+    }
+
+    @Test
+    void markAsReadFlipsAnUnreadNotificationBelongingToTheCaller() throws GenericException {
+        Notification notification = Notification.builder().id(5L).userId(USER_ID).isRead(false).build();
+        when(notificationRepository.findById(5L)).thenReturn(Optional.of(notification));
+
+        notificationService.markAsRead(5L, USER_ID);
+
+        ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationRepository, times(1)).save(captor.capture());
+        assertThat(captor.getValue().isRead()).isTrue();
+    }
+
+    @Test
+    void markAsReadIsANoOpForAnAlreadyReadNotification() throws GenericException {
+        Notification notification = Notification.builder().id(5L).userId(USER_ID).isRead(true).build();
+        when(notificationRepository.findById(5L)).thenReturn(Optional.of(notification));
+
+        notificationService.markAsRead(5L, USER_ID);
+
+        verify(notificationRepository, never()).save(any());
+    }
+
+    @Test
+    void markAsReadThrowsNotFoundForAnUnknownId() {
+        when(notificationRepository.findById(5L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> notificationService.markAsRead(5L, USER_ID))
+                .isInstanceOf(GenericException.class)
+                .extracting(ex -> ((GenericException) ex).getExceptionCode())
+                .isEqualTo(ExceptionCodeEnum.NOTIFICATION_NOT_FOUND);
+    }
+
+    @Test
+    void markAsReadThrowsNotFoundRatherThanLeakingThatItBelongsToSomeoneElse() {
+        Notification notification = Notification.builder().id(5L).userId(999L).isRead(false).build();
+        when(notificationRepository.findById(5L)).thenReturn(Optional.of(notification));
+
+        assertThatThrownBy(() -> notificationService.markAsRead(5L, USER_ID))
+                .isInstanceOf(GenericException.class)
+                .extracting(ex -> ((GenericException) ex).getExceptionCode())
+                .isEqualTo(ExceptionCodeEnum.NOTIFICATION_NOT_FOUND);
+
+        verify(notificationRepository, never()).save(any());
+    }
+
+    @Test
+    void markAllAsReadFlipsEveryUnreadNotificationForTheUser() {
+        Notification first = Notification.builder().id(1L).userId(USER_ID).isRead(false).build();
+        Notification second = Notification.builder().id(2L).userId(USER_ID).isRead(false).build();
+        when(notificationRepository.findByUserIdAndIsReadFalse(USER_ID)).thenReturn(List.of(first, second));
+
+        notificationService.markAllAsRead(USER_ID);
+
+        assertThat(first.isRead()).isTrue();
+        assertThat(second.isRead()).isTrue();
+        verify(notificationRepository, times(1)).saveAll(List.of(first, second));
+    }
+
+    @Test
+    void markAllAsReadIsANoOpWhenNothingIsUnread() {
+        when(notificationRepository.findByUserIdAndIsReadFalse(USER_ID)).thenReturn(List.of());
+
+        notificationService.markAllAsRead(USER_ID);
+
+        verify(notificationRepository, times(1)).saveAll(List.of());
     }
 }

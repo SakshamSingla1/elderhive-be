@@ -1,6 +1,9 @@
 package com.elderhive.services;
 
+import com.elderhive.dtos.Notification.NotificationResponse;
 import com.elderhive.exceptions.GenericException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.Map;
 
@@ -11,6 +14,12 @@ import java.util.Map;
  * from Prompt 55, Web Push from Prompt 56, the live WebSocket push from Prompt 57). No later
  * phase may hand-build a notification string or write these rows directly — every
  * user-facing notification routes through send().
+ *
+ * <p>Also owns reading back and marking read a user's own in-app inbox (Prompt 60) — these
+ * stayed on this service rather than a separate one since they operate on the exact same
+ * Notification rows send() writes. Preference CRUD is deliberately a separate
+ * NotificationPreferenceService: preferences are their own resource with their own lifecycle,
+ * not something a single send() call reads and writes.
  */
 public interface NotificationService {
 
@@ -24,4 +33,21 @@ public interface NotificationService {
      * {@code /topic/notifications/targetUserId}.
      */
     void send(String templateKey, Map<String, String> variables, Long targetUserId) throws GenericException;
+
+    /** The caller's own notifications, newest first. */
+    Page<NotificationResponse> getByUser(Long userId, Pageable pageable);
+
+    /** The caller's own unread count — what NotificationBell's 30s poll fallback reads. */
+    long getUnreadCount(Long userId);
+
+    /**
+     * Marks one notification read. Throws NOTIFICATION_NOT_FOUND both when the id doesn't
+     * exist AND when it exists but belongs to a different user — never distinguishing the two
+     * to a caller, so one user can't probe for another's notification ids via the error
+     * response.
+     */
+    void markAsRead(Long notificationId, Long userId) throws GenericException;
+
+    /** Marks every currently-unread notification for userId as read. A no-op if none are unread. */
+    void markAllAsRead(Long userId);
 }

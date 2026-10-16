@@ -1,5 +1,6 @@
 package com.elderhive.services.impl;
 
+import com.elderhive.dtos.Notification.NotificationResponse;
 import com.elderhive.entities.Notification;
 import com.elderhive.entities.NotificationDeliveryLog;
 import com.elderhive.entities.NotificationPreference;
@@ -20,10 +21,13 @@ import com.elderhive.services.TemplateRenderer;
 import com.elderhive.webpush.WebPushSenderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -103,6 +107,50 @@ public class NotificationServiceImpl implements NotificationService {
         }
 
         messagingTemplate.convertAndSend("/topic/notifications/" + targetUserId, notification);
+    }
+
+    @Override
+    public Page<NotificationResponse> getByUser(Long userId, Pageable pageable) {
+        return notificationRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable)
+                .map(this::mapToResponse);
+    }
+
+    @Override
+    public long getUnreadCount(Long userId) {
+        return notificationRepository.countByUserIdAndIsReadFalse(userId);
+    }
+
+    @Override
+    @Transactional
+    public void markAsRead(Long notificationId, Long userId) throws GenericException {
+        Notification notification = notificationRepository.findById(notificationId)
+                .filter(n -> n.getUserId().equals(userId))
+                .orElseThrow(() -> new GenericException(ExceptionCodeEnum.NOTIFICATION_NOT_FOUND,
+                        "Notification not found: " + notificationId));
+        if (!notification.isRead()) {
+            notification.setRead(true);
+            notificationRepository.save(notification);
+        }
+    }
+
+    @Override
+    @Transactional
+    public void markAllAsRead(Long userId) {
+        List<Notification> unread = notificationRepository.findByUserIdAndIsReadFalse(userId);
+        unread.forEach(n -> n.setRead(true));
+        notificationRepository.saveAll(unread);
+    }
+
+    private NotificationResponse mapToResponse(Notification notification) {
+        return NotificationResponse.builder()
+                .id(notification.getId())
+                .type(notification.getType())
+                .title(notification.getTitle())
+                .message(notification.getMessage())
+                .link(notification.getLink())
+                .isRead(notification.isRead())
+                .createdAt(notification.getCreatedAt())
+                .build();
     }
 
     private void writeDeliveryLog(Notification notification, NotificationChannelEnum channel,

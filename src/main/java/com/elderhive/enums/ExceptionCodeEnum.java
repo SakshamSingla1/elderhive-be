@@ -55,6 +55,7 @@ public enum ExceptionCodeEnum {
 
     // ==== NOTIFICATION ====
     NOTIFICATION_TEMPLATE_NOT_FOUND("NOTIFICATION_TEMPLATE_NOT_FOUND"),
+    NOTIFICATION_NOT_FOUND("NOTIFICATION_NOT_FOUND"),
     // Deliberately NOT registered in any of GlobalExceptionHandler's four buckets — an
     // unresolved {{placeholder}} means a later phase's calling code forgot to supply a
     // variable the template requires, a programmer bug, not a user-facing 400. Falls
