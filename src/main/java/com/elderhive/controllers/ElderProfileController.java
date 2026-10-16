@@ -2,6 +2,8 @@ package com.elderhive.controllers;
 
 import com.elderhive.dtos.ElderProfile.ElderProfileRequest;
 import com.elderhive.dtos.ElderProfile.ElderProfileResponse;
+import com.elderhive.dtos.ElderProfileLinkInvite.CreateInviteRequest;
+import com.elderhive.dtos.ElderProfileLinkInvite.InviteResponse;
 import com.elderhive.dtos.FamilyElderLink.FamilyElderLinkRequest;
 import com.elderhive.dtos.FamilyElderLink.FamilyMemberSummaryResponse;
 import com.elderhive.entities.User;
@@ -13,6 +15,7 @@ import com.elderhive.payload.ResponseModel;
 import com.elderhive.repositories.UserRepository;
 import com.elderhive.services.ElderProfileService;
 import com.elderhive.services.FamilyElderLinkService;
+import com.elderhive.services.InviteService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -50,6 +53,7 @@ public class ElderProfileController {
 
     private final ElderProfileService elderProfileService;
     private final FamilyElderLinkService familyElderLinkService;
+    private final InviteService inviteService;
     private final UserRepository userRepository;
 
     @PreAuthorize("isAuthenticated()")
@@ -141,6 +145,30 @@ public class ElderProfileController {
         User caller = currentUser();
         familyElderLinkService.removeFamilyMember(id, userId, caller);
         return ApiResponse.successResponse("Removed", "Family member removed successfully");
+    }
+
+    /**
+     * Owner, a co-managing family member, or an ADMIN/SUPER_ADMIN invites someone by
+     * email/phone to join as the elder or an additional family member (Prompt 63) — unlike
+     * addFamilyMember above, the invitee doesn't need an account yet; they accept later via
+     * the token-addressed endpoints on InviteController.
+     */
+    @PreAuthorize("isAuthenticated()")
+    @PostMapping("/{id}/invites")
+    public ResponseEntity<ResponseModel<InviteResponse>> createInvite(
+            @PathVariable Long id, @Valid @RequestBody CreateInviteRequest request) throws GenericException {
+        User caller = currentUser();
+        elderProfileService.getById(id, caller);
+        return ApiResponse.createSuccess(inviteService.createInvite(id, request, caller), "Invite created successfully");
+    }
+
+    /** Same access standing as viewing family members — getById's own access check is reused as a pre-check. */
+    @PreAuthorize("isAuthenticated()")
+    @GetMapping("/{id}/invites")
+    public ResponseEntity<ResponseModel<List<InviteResponse>>> getInvites(@PathVariable Long id) throws GenericException {
+        User caller = currentUser();
+        elderProfileService.getById(id, caller);
+        return ApiResponse.successResponse(inviteService.getInvitesForProfile(id), "Invites fetched successfully");
     }
 
     /**

@@ -323,4 +323,166 @@ class ElderProfileControllerIntegrationTest {
                         .cookie(loginCookieFor(owner)))
                 .andExpect(status().isNotFound());
     }
+
+    // ==== ElderProfileLinkInvite (Prompt 63) ====
+
+    private String inviteJson(String email, String phone, String role, String label) {
+        return """
+                { "invitedEmail": %s, "invitedPhone": %s, "invitedRole": "%s", "relationshipLabel": %s }
+                """.formatted(
+                email == null ? "null" : "\"" + email + "\"",
+                phone == null ? "null" : "\"" + phone + "\"",
+                role,
+                label == null ? "null" : "\"" + label + "\"");
+    }
+
+    private String extractToken(MvcResult result) throws Exception {
+        return objectMapper.readTree(result.getResponse().getContentAsString()).get("data").get("token").asText();
+    }
+
+    @Test
+    void theOwnerCanInviteAFamilyMemberByEmailAndThatPersonCanAcceptAfterRegistering() throws Exception {
+        User owner = persistUser("invite-fam-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
+        Long id = createProfile(loginCookieFor(owner), "Elder");
+
+        MvcResult createResult = mockMvc.perform(post("/api/v1/elder-profiles/" + id + "/invites").cookie(loginCookieFor(owner))
+                        .contentType("application/json")
+                        .content(inviteJson("invitee-fam@example.com", null, "FAMILY_MEMBER", "Daughter")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.status").value("PENDING"))
+                .andReturn();
+        String token = extractToken(createResult);
+
+        User invitee = persistUser("invitee-fam@example.com", UserTypeEnum.FAMILY_MEMBER);
+        mockMvc.perform(put("/api/v1/invites/accept/" + token).cookie(loginCookieFor(invitee)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("ACCEPTED"));
+
+        mockMvc.perform(get("/api/v1/elder-profiles/" + id).cookie(loginCookieFor(invitee)))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/elder-profiles/" + id + "/family-members").cookie(loginCookieFor(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(2));
+    }
+
+    @Test
+    void theOwnerCanInviteAnElderByPhoneAndThatPersonCanAccept() throws Exception {
+        User owner = persistUser("invite-elder-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
+        Long id = createProfile(loginCookieFor(owner), "Elder");
+
+        MvcResult createResult = mockMvc.perform(post("/api/v1/elder-profiles/" + id + "/invites").cookie(loginCookieFor(owner))
+                        .contentType("application/json")
+                        .content(inviteJson(null, "+1-555-8888", "ELDER", null)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String token = extractToken(createResult);
+
+        User invitee = userRepository.save(User.builder()
+                .email("invitee-elder@example.com").phone("+1-555-8888").passwordHash("hashed")
+                .userType(UserTypeEnum.ELDER).status(UserStatusEnum.ACTIVE).build());
+
+        mockMvc.perform(put("/api/v1/invites/accept/" + token).cookie(loginCookieFor(invitee)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("ACCEPTED"));
+
+        mockMvc.perform(get("/api/v1/elder-profiles/me").cookie(loginCookieFor(invitee)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.fullName").value("Elder"));
+    }
+
+    @Test
+    void anInviteeCanDeclineAnInvite() throws Exception {
+        User owner = persistUser("invite-decline-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
+        Long id = createProfile(loginCookieFor(owner), "Elder");
+
+        MvcResult createResult = mockMvc.perform(post("/api/v1/elder-profiles/" + id + "/invites").cookie(loginCookieFor(owner))
+                        .contentType("application/json")
+                        .content(inviteJson("invitee-decline@example.com", null, "FAMILY_MEMBER", null)))
+                .andReturn();
+        String token = extractToken(createResult);
+
+        User invitee = persistUser("invitee-decline@example.com", UserTypeEnum.FAMILY_MEMBER);
+        mockMvc.perform(put("/api/v1/invites/decline/" + token).cookie(loginCookieFor(invitee)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("DECLINED"));
+
+        mockMvc.perform(get("/api/v1/elder-profiles/" + id).cookie(loginCookieFor(invitee)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void acceptingWithAMismatchedAccountIsForbidden() throws Exception {
+        User owner = persistUser("invite-mismatch-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
+        Long id = createProfile(loginCookieFor(owner), "Elder");
+
+        MvcResult createResult = mockMvc.perform(post("/api/v1/elder-profiles/" + id + "/invites").cookie(loginCookieFor(owner))
+                        .contentType("application/json")
+                        .content(inviteJson("invitee-real@example.com", null, "FAMILY_MEMBER", null)))
+                .andReturn();
+        String token = extractToken(createResult);
+
+        User someoneElse = persistUser("someone-else@example.com", UserTypeEnum.FAMILY_MEMBER);
+        mockMvc.perform(put("/api/v1/invites/accept/" + token).cookie(loginCookieFor(someoneElse)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void anUnknownTokenReturns404OnAcceptOrDecline() throws Exception {
+        User someone = persistUser("invite-unknown-token@example.com", UserTypeEnum.FAMILY_MEMBER);
+
+        mockMvc.perform(put("/api/v1/invites/accept/not-a-real-token").cookie(loginCookieFor(someone)))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(put("/api/v1/invites/decline/not-a-real-token").cookie(loginCookieFor(someone)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void invitingWithBothEmailAndPhoneIsBadRequest() throws Exception {
+        User owner = persistUser("invite-bothcontacts-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
+        Long id = createProfile(loginCookieFor(owner), "Elder");
+
+        mockMvc.perform(post("/api/v1/elder-profiles/" + id + "/invites").cookie(loginCookieFor(owner))
+                        .contentType("application/json")
+                        .content(inviteJson("both@example.com", "+1-555-0000", "FAMILY_MEMBER", null)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void invitingWithAnInvalidRoleIsBadRequest() throws Exception {
+        User owner = persistUser("invite-invalidrole-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
+        Long id = createProfile(loginCookieFor(owner), "Elder");
+
+        mockMvc.perform(post("/api/v1/elder-profiles/" + id + "/invites").cookie(loginCookieFor(owner))
+                        .contentType("application/json")
+                        .content(inviteJson("admin@example.com", null, "ADMIN", null)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void aStrangerCannotCreateOrListInvites() throws Exception {
+        User owner = persistUser("invite-stranger-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
+        User stranger = persistUser("invite-stranger-stranger@example.com", UserTypeEnum.FAMILY_MEMBER);
+        Long id = createProfile(loginCookieFor(owner), "Elder");
+
+        mockMvc.perform(post("/api/v1/elder-profiles/" + id + "/invites").cookie(loginCookieFor(stranger))
+                        .contentType("application/json")
+                        .content(inviteJson("x@example.com", null, "FAMILY_MEMBER", null)))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/elder-profiles/" + id + "/invites").cookie(loginCookieFor(stranger)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void getInvitesListsEveryInviteForTheProfile() throws Exception {
+        User owner = persistUser("invite-list-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
+        Long id = createProfile(loginCookieFor(owner), "Elder");
+        mockMvc.perform(post("/api/v1/elder-profiles/" + id + "/invites").cookie(loginCookieFor(owner))
+                .contentType("application/json").content(inviteJson("list1@example.com", null, "FAMILY_MEMBER", null)));
+        mockMvc.perform(post("/api/v1/elder-profiles/" + id + "/invites").cookie(loginCookieFor(owner))
+                .contentType("application/json").content(inviteJson("list2@example.com", null, "ELDER", null)));
+
+        mockMvc.perform(get("/api/v1/elder-profiles/" + id + "/invites").cookie(loginCookieFor(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(2));
+    }
 }
