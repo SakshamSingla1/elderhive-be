@@ -79,6 +79,15 @@ app:
     # the only way to create the first fine-grained admin, since there's no self-service
     # "become admin" flow. Safe to leave set permanently (see the seeder's own javadoc).
     bootstrap-email: ${ADMIN_BOOTSTRAP_EMAIL:}
+  web-push:
+    vapid:
+      # Blank by default -> VapidKeyProvider generates an ephemeral key pair on every boot,
+      # fine for local dev but means subscriptions don't survive a restart. Every real
+      # deployment MUST set these to a persistent, generated-once P-256 key pair (base64url,
+      # unpadded) so registered browser subscriptions keep working across restarts.
+      public-key: ${VAPID_PUBLIC_KEY:}
+      private-key: ${VAPID_PRIVATE_KEY:}
+      subject: ${VAPID_SUBJECT:mailto:admin@elderhive.app}
 
 jwt:
   # dev-only fallback so the app boots with zero setup locally - every other environment MUST
