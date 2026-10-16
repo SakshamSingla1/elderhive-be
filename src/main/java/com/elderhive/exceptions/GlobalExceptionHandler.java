@@ -61,7 +61,8 @@ public class GlobalExceptionHandler {
             ExceptionCodeEnum.DATA_NOT_FOUND,
             ExceptionCodeEnum.COLOR_THEME_NOT_FOUND,
             ExceptionCodeEnum.NOTIFICATION_TEMPLATE_NOT_FOUND,
-            ExceptionCodeEnum.NOTIFICATION_NOT_FOUND
+            ExceptionCodeEnum.NOTIFICATION_NOT_FOUND,
+            ExceptionCodeEnum.ELDER_PROFILE_NOT_FOUND
     );
 
     @ExceptionHandler(GenericException.class)

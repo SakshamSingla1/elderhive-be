@@ -60,7 +60,10 @@ public enum ExceptionCodeEnum {
     // unresolved {{placeholder}} means a later phase's calling code forgot to supply a
     // variable the template requires, a programmer bug, not a user-facing 400. Falls
     // through resolveStatus's default to 500, which is the correct signal for it.
-    NOTIFICATION_TEMPLATE_PLACEHOLDER_UNRESOLVED("NOTIFICATION_TEMPLATE_PLACEHOLDER_UNRESOLVED");
+    NOTIFICATION_TEMPLATE_PLACEHOLDER_UNRESOLVED("NOTIFICATION_TEMPLATE_PLACEHOLDER_UNRESOLVED"),
+
+    // ==== ELDER PROFILE ====
+    ELDER_PROFILE_NOT_FOUND("ELDER_PROFILE_NOT_FOUND");
 
     private final String value;
 
