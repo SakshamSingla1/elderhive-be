@@ -1,5 +1,6 @@
 package com.elderhive.dtos.CaretakerProfile;
 
+import com.elderhive.dtos.ServiceCategory.ServiceCategoryResponse;
 import com.elderhive.enums.CaretakerVerificationStatusEnum;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -11,7 +12,9 @@ import java.time.LocalDateTime;
 import java.util.Set;
 
 /** fullName/email/phone are denormalized from User - saves a caller a second lookup when
- *  browsing caretaker profiles (matches ElderSphere's own response shape). */
+ *  browsing caretaker profiles (matches ElderSphere's own response shape). specialties is
+ *  the full ServiceCategoryResponse per entry (Prompt 72), not just ids, so a caller can
+ *  render the category's name/icon without a second lookup either. */
 @Data
 @Builder
 @NoArgsConstructor
@@ -24,7 +27,7 @@ public class CaretakerProfileResponse {
     private String email;
     private String phone;
     private String bio;
-    private Set<String> specialties;
+    private Set<ServiceCategoryResponse> specialties;
     private Integer yearsOfExperience;
     private BigDecimal hourlyRate;
     private Double ratingAverage;

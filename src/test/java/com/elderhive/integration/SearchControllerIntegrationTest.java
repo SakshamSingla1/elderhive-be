@@ -1,8 +1,11 @@
 package com.elderhive.integration;
 
+import com.elderhive.entities.ServiceCategory;
 import com.elderhive.entities.User;
+import com.elderhive.enums.ServiceCategoryStatusEnum;
 import com.elderhive.enums.UserStatusEnum;
 import com.elderhive.enums.UserTypeEnum;
+import com.elderhive.repositories.ServiceCategoryRepository;
 import com.elderhive.repositories.UserRepository;
 import com.elderhive.security.JwtUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -38,6 +41,9 @@ class SearchControllerIntegrationTest {
     private UserRepository userRepository;
 
     @Autowired
+    private ServiceCategoryRepository serviceCategoryRepository;
+
+    @Autowired
     private ObjectMapper objectMapper;
 
     private Cookie loginCookieFor(User user) {
@@ -50,20 +56,25 @@ class SearchControllerIntegrationTest {
                 .email(email).fullName(fullName).passwordHash("hashed").userType(type).status(UserStatusEnum.ACTIVE).build());
     }
 
+    private Long persistCategory(String name) {
+        return serviceCategoryRepository.save(ServiceCategory.builder().name(name).status(ServiceCategoryStatusEnum.ACTIVE).build()).getId();
+    }
+
     @Test
     void searchingCaretakersByNameReturnsAMatchingLightweightResult() throws Exception {
         User caretakerUser = persistUser("search-caretaker@example.com", "Carla Caretaker", UserTypeEnum.CARETAKER);
         User searcher = persistUser("search-searcher@example.com", "Someone", UserTypeEnum.FAMILY_MEMBER);
+        Long categoryId = persistCategory("search-Mobility Assistance");
         Cookie caretakerCookie = loginCookieFor(caretakerUser);
         mockMvc.perform(post("/api/v1/caretaker-profiles").cookie(caretakerCookie)
                 .contentType("application/json")
-                .content("{\"bio\":\"Bio\",\"specialties\":[\"Mobility Assistance\"],\"latitude\":12.9716,\"longitude\":77.5946}"));
+                .content("{\"bio\":\"Bio\",\"specialties\":[" + categoryId + "],\"latitude\":12.9716,\"longitude\":77.5946}"));
 
         mockMvc.perform(get("/api/v1/search/caretakers").param("query", "carla").cookie(loginCookieFor(searcher)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(1))
                 .andExpect(jsonPath("$.data[0].name").value("Carla Caretaker"))
-                .andExpect(jsonPath("$.data[0].specialtiesSummary").value("Mobility Assistance"))
+                .andExpect(jsonPath("$.data[0].specialtiesSummary").value("search-Mobility Assistance"))
                 .andExpect(jsonPath("$.data[0].verificationStatus").value("PENDING"));
     }
 

@@ -2,9 +2,7 @@ package com.elderhive.entities;
 
 import com.elderhive.audit.Auditable;
 import com.elderhive.enums.CaretakerVerificationStatusEnum;
-import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
-import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -13,6 +11,8 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -30,11 +30,10 @@ import java.util.Set;
  * ElderSphere's free-text {@code serviceArea} — Phase 11's proximity matching (emergency
  * fan-out) needs real coordinates to run a haversine query, not a string to pattern-match.
  *
- * <p>{@code specialties} is a plain string collection, not {@code Set<ServiceCategoryEnum>}
- * like ElderSphere's own field - there's no ServiceCategory table yet (that's Phase 9,
- * Prompt 71), and this prompt's own text explicitly says not to hardcode an enum here.
- * {@code caretaker_profile_specialties} is named now to match the join table Prompt 71
- * expects to find and convert to a proper many-to-many once ServiceCategory exists.
+ * <p>{@code specialties} is now a real many-to-many to {@link ServiceCategory} (Prompt 72),
+ * reusing the same {@code caretaker_profile_specialties} join table Prompt 64 named for
+ * exactly this conversion - it was a plain string {@code @ElementCollection} placeholder
+ * until this prompt, since there was no ServiceCategory table yet to point at.
  */
 @Entity
 @Table(name = "caretaker_profiles")
@@ -56,10 +55,13 @@ public class CaretakerProfile extends Auditable {
     private String bio;
 
     @Builder.Default
-    @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(name = "caretaker_profile_specialties", joinColumns = @JoinColumn(name = "caretaker_profile_id"))
-    @Column(name = "specialty")
-    private Set<String> specialties = new HashSet<>();
+    @ManyToMany(fetch = FetchType.EAGER)
+    @JoinTable(
+            name = "caretaker_profile_specialties",
+            joinColumns = @JoinColumn(name = "caretaker_profile_id"),
+            inverseJoinColumns = @JoinColumn(name = "service_category_id")
+    )
+    private Set<ServiceCategory> specialties = new HashSet<>();
 
     @Column(name = "years_of_experience")
     private Integer yearsOfExperience;

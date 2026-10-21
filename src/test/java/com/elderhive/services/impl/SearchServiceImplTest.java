@@ -5,8 +5,10 @@ import com.elderhive.dtos.Search.ElderProfileSearchResult;
 import com.elderhive.entities.CaretakerProfile;
 import com.elderhive.entities.ElderProfile;
 import com.elderhive.entities.FamilyElderLink;
+import com.elderhive.entities.ServiceCategory;
 import com.elderhive.entities.User;
 import com.elderhive.enums.CaretakerVerificationStatusEnum;
+import com.elderhive.enums.ServiceCategoryStatusEnum;
 import com.elderhive.enums.UserStatusEnum;
 import com.elderhive.enums.UserTypeEnum;
 import com.elderhive.repositories.CaretakerProfileRepository;
@@ -53,9 +55,13 @@ class SearchServiceImplTest {
                 .passwordHash("hashed").userType(type).status(UserStatusEnum.ACTIVE).build();
     }
 
-    private CaretakerProfile caretaker(Long id, Long userId, Double lat, Double lon, Set<String> specialties) {
+    private CaretakerProfile caretaker(Long id, Long userId, Double lat, Double lon, Set<ServiceCategory> specialties) {
         return CaretakerProfile.builder().id(id).userId(userId).latitude(lat).longitude(lon)
                 .ratingAverage(4.5).verificationStatus(CaretakerVerificationStatusEnum.VERIFIED).specialties(specialties).build();
+    }
+
+    private ServiceCategory category(Long id, String name) {
+        return ServiceCategory.builder().id(id).name(name).status(ServiceCategoryStatusEnum.ACTIVE).build();
     }
 
     // ==== searchCaretakers ====
@@ -78,7 +84,7 @@ class SearchServiceImplTest {
 
     @Test
     void searchingByNameReturnsMatchingCaretakersWithNoDistance() {
-        CaretakerProfile profile = caretaker(100L, 1L, null, null, Set.of("Mobility Assistance"));
+        CaretakerProfile profile = caretaker(100L, 1L, null, null, Set.of(category(1L, "Mobility Assistance")));
         when(caretakerProfileRepository.searchByFullNamePattern(eq("%car%"), any())).thenReturn(List.of(profile));
         when(userRepository.findAllById(List.of(1L))).thenReturn(List.of(user(1L, "Carla Caretaker", UserTypeEnum.CARETAKER)));
 
@@ -125,8 +131,9 @@ class SearchServiceImplTest {
 
     @Test
     void specialtiesSummaryIsCappedAndCountsTheRest() {
-        CaretakerProfile profile = caretaker(100L, 1L, null, null,
-                Set.of("Mobility Assistance", "Medication Management", "Meal Prep", "Companionship"));
+        CaretakerProfile profile = caretaker(100L, 1L, null, null, Set.of(
+                category(1L, "Mobility Assistance"), category(2L, "Medication Management"),
+                category(3L, "Meal Prep"), category(4L, "Companionship")));
         when(caretakerProfileRepository.searchByFullNamePattern(any(), any())).thenReturn(List.of(profile));
         when(userRepository.findAllById(any())).thenReturn(List.of(user(1L, "Carla", UserTypeEnum.CARETAKER)));
 

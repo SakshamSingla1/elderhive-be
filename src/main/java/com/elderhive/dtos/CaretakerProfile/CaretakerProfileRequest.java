@@ -13,13 +13,16 @@ import java.util.Set;
  * admin-only (Prompt 65's review endpoint), profilePhotoFileAssetId is set by the upload
  * endpoint (Prompt 65), and ratingAverage is denormalized from Review rows (Phase 12) - none
  * of them are ever directly caretaker-editable.
+ *
+ * <p>{@code specialties} is a set of ServiceCategory ids (Prompt 72) - a caretaker picks
+ * from the admin-managed catalog, not free text anymore.
  */
 @Data
 public class CaretakerProfileRequest {
 
     private String bio;
 
-    private Set<String> specialties;
+    private Set<Long> specialties;
 
     @Min(value = 0, message = "Years of experience cannot be negative")
     private Integer yearsOfExperience;

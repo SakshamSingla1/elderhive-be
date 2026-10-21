@@ -2,13 +2,16 @@ package com.elderhive.services.impl;
 
 import com.elderhive.dtos.CaretakerProfile.CaretakerProfileRequest;
 import com.elderhive.dtos.CaretakerProfile.CaretakerProfileResponse;
+import com.elderhive.dtos.ServiceCategory.ServiceCategoryResponse;
 import com.elderhive.entities.CaretakerProfile;
+import com.elderhive.entities.ServiceCategory;
 import com.elderhive.entities.User;
 import com.elderhive.enums.CaretakerVerificationStatusEnum;
 import com.elderhive.enums.ExceptionCodeEnum;
 import com.elderhive.enums.UserTypeEnum;
 import com.elderhive.exceptions.GenericException;
 import com.elderhive.repositories.CaretakerProfileRepository;
+import com.elderhive.repositories.ServiceCategoryRepository;
 import com.elderhive.repositories.UserRepository;
 import com.elderhive.services.CaretakerProfileService;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +21,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Ported from ElderSphere's own createOrUpdateForUser/getByUserId/getById shape, upsert
@@ -32,6 +38,7 @@ public class CaretakerProfileServiceImpl implements CaretakerProfileService {
 
     private final CaretakerProfileRepository caretakerProfileRepository;
     private final UserRepository userRepository;
+    private final ServiceCategoryRepository serviceCategoryRepository;
 
     @Override
     @Transactional
@@ -50,7 +57,7 @@ public class CaretakerProfileServiceImpl implements CaretakerProfileService {
         }
 
         profile.setBio(request.getBio());
-        profile.setSpecialties(request.getSpecialties() != null ? new HashSet<>(request.getSpecialties()) : new HashSet<>());
+        profile.setSpecialties(resolveSpecialties(request.getSpecialties()));
         profile.setYearsOfExperience(request.getYearsOfExperience());
         profile.setHourlyRate(request.getHourlyRate());
         profile.setLatitude(request.getLatitude());
@@ -80,6 +87,20 @@ public class CaretakerProfileServiceImpl implements CaretakerProfileService {
                 .map(profile -> toResponse(profile, userRepository.findById(profile.getUserId()).orElse(null)));
     }
 
+    /** Resolves a submitted set of ServiceCategory ids (Prompt 72) to the real entities -
+     *  fails cleanly if any id doesn't correspond to an existing category, rather than
+     *  silently dropping it. */
+    private Set<ServiceCategory> resolveSpecialties(Set<Long> categoryIds) throws GenericException {
+        if (categoryIds == null || categoryIds.isEmpty()) {
+            return new HashSet<>();
+        }
+        List<ServiceCategory> found = serviceCategoryRepository.findAllById(categoryIds);
+        if (found.size() != new HashSet<>(categoryIds).size()) {
+            throw new GenericException(ExceptionCodeEnum.SERVICE_CATEGORY_NOT_FOUND, "One or more selected service categories were not found");
+        }
+        return new HashSet<>(found);
+    }
+
     private CaretakerProfileResponse toResponse(CaretakerProfile profile, User user) {
         return CaretakerProfileResponse.builder()
                 .id(profile.getId())
@@ -88,7 +109,7 @@ public class CaretakerProfileServiceImpl implements CaretakerProfileService {
                 .email(user != null ? user.getEmail() : null)
                 .phone(user != null ? user.getPhone() : null)
                 .bio(profile.getBio())
-                .specialties(profile.getSpecialties())
+                .specialties(profile.getSpecialties().stream().map(this::toCategoryResponse).collect(Collectors.toSet()))
                 .yearsOfExperience(profile.getYearsOfExperience())
                 .hourlyRate(profile.getHourlyRate())
                 .ratingAverage(profile.getRatingAverage())
@@ -101,6 +122,18 @@ public class CaretakerProfileServiceImpl implements CaretakerProfileService {
                 .updatedAt(profile.getUpdatedAt())
                 .createdBy(profile.getCreatedBy())
                 .updatedBy(profile.getUpdatedBy())
+                .build();
+    }
+
+    private ServiceCategoryResponse toCategoryResponse(ServiceCategory category) {
+        return ServiceCategoryResponse.builder()
+                .id(category.getId())
+                .name(category.getName())
+                .description(category.getDescription())
+                .icon(category.getIcon())
+                .status(category.getStatus())
+                .createdAt(category.getCreatedAt())
+                .updatedAt(category.getUpdatedAt())
                 .build();
     }
 }

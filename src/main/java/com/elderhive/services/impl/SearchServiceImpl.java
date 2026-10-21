@@ -5,6 +5,7 @@ import com.elderhive.dtos.Search.ElderProfileSearchResult;
 import com.elderhive.entities.CaretakerProfile;
 import com.elderhive.entities.ElderProfile;
 import com.elderhive.entities.FamilyElderLink;
+import com.elderhive.entities.ServiceCategory;
 import com.elderhive.entities.User;
 import com.elderhive.repositories.CaretakerProfileRepository;
 import com.elderhive.repositories.ElderProfileRepository;
@@ -107,11 +108,11 @@ public class SearchServiceImpl implements SearchService {
                 .build();
     }
 
-    private String summarizeSpecialties(Set<String> specialties) {
+    private String summarizeSpecialties(Set<ServiceCategory> specialties) {
         if (specialties == null || specialties.isEmpty()) {
             return null;
         }
-        List<String> sorted = specialties.stream().sorted().toList();
+        List<String> sorted = specialties.stream().map(ServiceCategory::getName).sorted().toList();
         if (sorted.size() <= MAX_SPECIALTIES_IN_SUMMARY) {
             return String.join(", ", sorted);
         }

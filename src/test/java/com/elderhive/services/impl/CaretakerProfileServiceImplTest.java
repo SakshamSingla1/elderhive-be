@@ -3,13 +3,16 @@ package com.elderhive.services.impl;
 import com.elderhive.dtos.CaretakerProfile.CaretakerProfileRequest;
 import com.elderhive.dtos.CaretakerProfile.CaretakerProfileResponse;
 import com.elderhive.entities.CaretakerProfile;
+import com.elderhive.entities.ServiceCategory;
 import com.elderhive.entities.User;
 import com.elderhive.enums.CaretakerVerificationStatusEnum;
 import com.elderhive.enums.ExceptionCodeEnum;
+import com.elderhive.enums.ServiceCategoryStatusEnum;
 import com.elderhive.enums.UserStatusEnum;
 import com.elderhive.enums.UserTypeEnum;
 import com.elderhive.exceptions.GenericException;
 import com.elderhive.repositories.CaretakerProfileRepository;
+import com.elderhive.repositories.ServiceCategoryRepository;
 import com.elderhive.repositories.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,6 +43,9 @@ class CaretakerProfileServiceImplTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private ServiceCategoryRepository serviceCategoryRepository;
+
     @InjectMocks
     private CaretakerProfileServiceImpl caretakerProfileService;
 
@@ -48,10 +54,14 @@ class CaretakerProfileServiceImplTest {
                 .passwordHash("hashed").userType(type).status(UserStatusEnum.ACTIVE).build();
     }
 
+    private ServiceCategory category(Long id, String name) {
+        return ServiceCategory.builder().id(id).name(name).status(ServiceCategoryStatusEnum.ACTIVE).build();
+    }
+
     private CaretakerProfileRequest request() {
         CaretakerProfileRequest request = new CaretakerProfileRequest();
         request.setBio("Experienced caregiver");
-        request.setSpecialties(Set.of("Mobility Assistance"));
+        request.setSpecialties(Set.of(5L));
         request.setYearsOfExperience(5);
         request.setHourlyRate(new BigDecimal("25.00"));
         request.setLatitude(12.9716);
@@ -64,6 +74,7 @@ class CaretakerProfileServiceImplTest {
     void aCaretakerCreatingAProfileForTheFirstTimeDefaultsToPendingAndZeroRating() throws GenericException {
         User caretaker = user(1L, UserTypeEnum.CARETAKER);
         when(caretakerProfileRepository.findByUserId(1L)).thenReturn(Optional.empty());
+        when(serviceCategoryRepository.findAllById(Set.of(5L))).thenReturn(List.of(category(5L, "Mobility Assistance")));
         when(caretakerProfileRepository.save(any())).thenAnswer(inv -> {
             CaretakerProfile p = inv.getArgument(0);
             p.setId(100L);
@@ -78,7 +89,7 @@ class CaretakerProfileServiceImplTest {
         assertThat(response.getLatitude()).isEqualTo(12.9716);
         assertThat(response.getLongitude()).isEqualTo(77.5946);
         assertThat(response.getServiceRadiusKm()).isEqualTo(10.0);
-        assertThat(response.getSpecialties()).containsExactly("Mobility Assistance");
+        assertThat(response.getSpecialties()).extracting("name").containsExactly("Mobility Assistance");
         assertThat(response.getFullName()).isEqualTo("User 1");
     }
 
@@ -88,6 +99,7 @@ class CaretakerProfileServiceImplTest {
         CaretakerProfile existing = CaretakerProfile.builder()
                 .id(100L).userId(1L).bio("Old bio").verificationStatus(CaretakerVerificationStatusEnum.VERIFIED).ratingAverage(4.5).build();
         when(caretakerProfileRepository.findByUserId(1L)).thenReturn(Optional.of(existing));
+        when(serviceCategoryRepository.findAllById(Set.of(5L))).thenReturn(List.of(category(5L, "Mobility Assistance")));
         when(caretakerProfileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         CaretakerProfileResponse response = caretakerProfileService.createOrUpdate(caretaker, request());
@@ -97,6 +109,34 @@ class CaretakerProfileServiceImplTest {
         // Verification status and rating are untouched by an update - not caretaker-editable.
         assertThat(response.getVerificationStatus()).isEqualTo(CaretakerVerificationStatusEnum.VERIFIED);
         assertThat(response.getRatingAverage()).isEqualTo(4.5);
+    }
+
+    @Test
+    void submittingAnUnknownCategoryIdThrowsServiceCategoryNotFound() {
+        User caretaker = user(1L, UserTypeEnum.CARETAKER);
+        when(caretakerProfileRepository.findByUserId(1L)).thenReturn(Optional.empty());
+        when(serviceCategoryRepository.findAllById(Set.of(5L))).thenReturn(List.of());
+
+        assertThatThrownBy(() -> caretakerProfileService.createOrUpdate(caretaker, request()))
+                .isInstanceOf(GenericException.class)
+                .extracting(ex -> ((GenericException) ex).getExceptionCode())
+                .isEqualTo(ExceptionCodeEnum.SERVICE_CATEGORY_NOT_FOUND);
+
+        verify(caretakerProfileRepository, never()).save(any());
+    }
+
+    @Test
+    void submittingNoSpecialtiesAtAllResultsInAnEmptySet() throws GenericException {
+        User caretaker = user(1L, UserTypeEnum.CARETAKER);
+        when(caretakerProfileRepository.findByUserId(1L)).thenReturn(Optional.empty());
+        when(caretakerProfileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        CaretakerProfileRequest noSpecialties = request();
+        noSpecialties.setSpecialties(null);
+
+        CaretakerProfileResponse response = caretakerProfileService.createOrUpdate(caretaker, noSpecialties);
+
+        assertThat(response.getSpecialties()).isEmpty();
+        verify(serviceCategoryRepository, never()).findAllById(any());
     }
 
     @Test
