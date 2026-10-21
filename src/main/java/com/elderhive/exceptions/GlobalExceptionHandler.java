@@ -48,14 +48,16 @@ public class GlobalExceptionHandler {
             ExceptionCodeEnum.FORMAT_ERROR,
             ExceptionCodeEnum.PASSWORD_TOO_WEAK,
             ExceptionCodeEnum.INVALID_ROLE,
-            ExceptionCodeEnum.FILE_TYPE_NOT_ALLOWED
+            ExceptionCodeEnum.FILE_TYPE_NOT_ALLOWED,
+            ExceptionCodeEnum.INVALID_BOOKING_STATUS_TRANSITION
     );
 
     private static final Set<ExceptionCodeEnum> CONFLICT_CODES = Set.of(
             ExceptionCodeEnum.CONFLICT,
             ExceptionCodeEnum.DUPLICATE_EMAIL,
             ExceptionCodeEnum.COLOR_THEME_ALREADY_EXISTS,
-            ExceptionCodeEnum.SERVICE_CATEGORY_ALREADY_EXISTS
+            ExceptionCodeEnum.SERVICE_CATEGORY_ALREADY_EXISTS,
+            ExceptionCodeEnum.BOOKING_SLOT_UNAVAILABLE
     );
 
     private static final Set<ExceptionCodeEnum> NOT_FOUND_CODES = Set.of(
@@ -70,7 +72,8 @@ public class GlobalExceptionHandler {
             ExceptionCodeEnum.FILE_NOT_FOUND,
             ExceptionCodeEnum.CARETAKER_VERIFICATION_DOCUMENT_NOT_FOUND,
             ExceptionCodeEnum.SERVICE_CATEGORY_NOT_FOUND,
-            ExceptionCodeEnum.SERVICE_OFFERING_NOT_FOUND
+            ExceptionCodeEnum.SERVICE_OFFERING_NOT_FOUND,
+            ExceptionCodeEnum.BOOKING_NOT_FOUND
     );
 
     @ExceptionHandler(GenericException.class)

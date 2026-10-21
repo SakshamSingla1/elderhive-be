@@ -87,7 +87,16 @@ public enum ExceptionCodeEnum {
     SERVICE_CATEGORY_NOT_FOUND("SERVICE_CATEGORY_NOT_FOUND"),
 
     // ==== SERVICE OFFERING ====
-    SERVICE_OFFERING_NOT_FOUND("SERVICE_OFFERING_NOT_FOUND");
+    SERVICE_OFFERING_NOT_FOUND("SERVICE_OFFERING_NOT_FOUND"),
+
+    // ==== BOOKING ====
+    BOOKING_NOT_FOUND("BOOKING_NOT_FOUND"),
+    // A requested status change doesn't follow BookingStatusEnum's lifecycle (e.g.
+    // COMPLETED -> PENDING, or any change away from a terminal COMPLETED/CANCELLED).
+    INVALID_BOOKING_STATUS_TRANSITION("INVALID_BOOKING_STATUS_TRANSITION"),
+    // The requested caretaker/date/time slot is already taken by another non-terminal
+    // booking - a scheduling conflict, not a missing-resource or bad-input problem.
+    BOOKING_SLOT_UNAVAILABLE("BOOKING_SLOT_UNAVAILABLE");
 
     private final String value;
 
