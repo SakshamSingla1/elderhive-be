@@ -31,3 +31,6 @@ target/
 
 .env
 .env.local
+
+# Local file-storage fallback (app.file-storage.upload-dir) - real uploaded files, never committed
+/uploads/

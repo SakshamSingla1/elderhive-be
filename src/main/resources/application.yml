@@ -88,6 +88,20 @@ app:
       public-key: ${VAPID_PUBLIC_KEY:}
       private-key: ${VAPID_PRIVATE_KEY:}
       subject: ${VAPID_SUBJECT:mailto:admin@elderhive.app}
+  file-storage:
+    # Relative to the working directory the app runs from. Used verbatim by
+    # FileStorageServiceImpl's local-disk fallback and by WebConfig's /uploads/** resource
+    # handler - keep the two in sync (they read the same property).
+    upload-dir: ${FILE_UPLOAD_DIR:uploads}
+    public-base-url: ${FILE_PUBLIC_BASE_URL:${app.url}/uploads}
+
+# Blank by default -> CloudinaryConfig#isConfigured() is false and FileStorageServiceImpl's
+# uploads transparently fall back to local disk (app.file-storage.upload-dir above) - safe
+# for local dev with zero setup. Set all three for a real deployment.
+cloudinary:
+  cloud-name: ${CLOUDINARY_CLOUD_NAME:}
+  api-key: ${CLOUDINARY_API_KEY:}
+  api-secret: ${CLOUDINARY_API_SECRET:}
 
 jwt:
   # dev-only fallback so the app boots with zero setup locally - every other environment MUST

@@ -47,7 +47,8 @@ public class GlobalExceptionHandler {
             ExceptionCodeEnum.VALIDATION_FAILED,
             ExceptionCodeEnum.FORMAT_ERROR,
             ExceptionCodeEnum.PASSWORD_TOO_WEAK,
-            ExceptionCodeEnum.INVALID_ROLE
+            ExceptionCodeEnum.INVALID_ROLE,
+            ExceptionCodeEnum.FILE_TYPE_NOT_ALLOWED
     );
 
     private static final Set<ExceptionCodeEnum> CONFLICT_CODES = Set.of(
@@ -64,7 +65,9 @@ public class GlobalExceptionHandler {
             ExceptionCodeEnum.NOTIFICATION_NOT_FOUND,
             ExceptionCodeEnum.ELDER_PROFILE_NOT_FOUND,
             ExceptionCodeEnum.ELDER_PROFILE_LINK_INVITE_NOT_FOUND,
-            ExceptionCodeEnum.CARETAKER_PROFILE_NOT_FOUND
+            ExceptionCodeEnum.CARETAKER_PROFILE_NOT_FOUND,
+            ExceptionCodeEnum.FILE_NOT_FOUND,
+            ExceptionCodeEnum.CARETAKER_VERIFICATION_DOCUMENT_NOT_FOUND
     );
 
     @ExceptionHandler(GenericException.class)

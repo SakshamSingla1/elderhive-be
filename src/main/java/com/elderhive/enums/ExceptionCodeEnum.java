@@ -69,7 +69,18 @@ public enum ExceptionCodeEnum {
     ELDER_PROFILE_LINK_INVITE_NOT_FOUND("ELDER_PROFILE_LINK_INVITE_NOT_FOUND"),
 
     // ==== CARETAKER PROFILE ====
-    CARETAKER_PROFILE_NOT_FOUND("CARETAKER_PROFILE_NOT_FOUND");
+    CARETAKER_PROFILE_NOT_FOUND("CARETAKER_PROFILE_NOT_FOUND"),
+
+    // ==== FILE STORAGE ====
+    FILE_NOT_FOUND("FILE_NOT_FOUND"),
+    // Server-side storage failure (disk I/O error, Cloudinary API error) - not registered in
+    // any GlobalExceptionHandler bucket, falls through resolveStatus's default to 500, which
+    // is the correct signal for it (not a user input problem).
+    FILE_STORAGE_FAILED("FILE_STORAGE_FAILED"),
+    FILE_TYPE_NOT_ALLOWED("FILE_TYPE_NOT_ALLOWED"),
+
+    // ==== CARETAKER VERIFICATION DOCUMENT ====
+    CARETAKER_VERIFICATION_DOCUMENT_NOT_FOUND("CARETAKER_VERIFICATION_DOCUMENT_NOT_FOUND");
 
     private final String value;
 
