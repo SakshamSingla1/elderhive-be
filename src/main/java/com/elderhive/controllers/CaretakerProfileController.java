@@ -1,5 +1,6 @@
 package com.elderhive.controllers;
 
+import com.elderhive.dtos.AvailableSlot.AvailableSlotsResponse;
 import com.elderhive.dtos.CaretakerAvailability.CaretakerAvailabilityRequest;
 import com.elderhive.dtos.CaretakerAvailability.CaretakerAvailabilityResponse;
 import com.elderhive.dtos.CaretakerProfile.CaretakerProfileRequest;
@@ -11,6 +12,7 @@ import com.elderhive.exceptions.GenericException;
 import com.elderhive.payload.ApiResponse;
 import com.elderhive.payload.ResponseModel;
 import com.elderhive.repositories.UserRepository;
+import com.elderhive.services.AvailableSlotService;
 import com.elderhive.services.CaretakerAvailabilityService;
 import com.elderhive.services.CaretakerProfileService;
 import com.elderhive.services.CaretakerVerificationDocumentService;
@@ -33,6 +35,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -49,6 +52,7 @@ public class CaretakerProfileController {
     private final CaretakerProfileService caretakerProfileService;
     private final CaretakerVerificationDocumentService caretakerVerificationDocumentService;
     private final CaretakerAvailabilityService caretakerAvailabilityService;
+    private final AvailableSlotService availableSlotService;
     private final UserRepository userRepository;
 
     @PreAuthorize("isAuthenticated()")
@@ -137,6 +141,18 @@ public class CaretakerProfileController {
         User caller = currentUser();
         caretakerAvailabilityService.delete(slotId, caller);
         return ApiResponse.successResponse("Deleted", "Availability slot deleted successfully");
+    }
+
+    /** Public - used by family members picking a time when booking a caretaker. Computed
+     *  from CaretakerAvailability's weekly schedule (Prompt 66) minus Booking's (Prompt 75)
+     *  already-booked times for that date - see AvailableSlotServiceImpl for the full
+     *  algorithm, including the usingDefaultHours fallback. */
+    @PreAuthorize("isAuthenticated()")
+    @GetMapping("/{id}/available-slots")
+    public ResponseEntity<ResponseModel<AvailableSlotsResponse>> getAvailableSlots(
+            @PathVariable Long id, @RequestParam LocalDate date, @RequestParam Long serviceOfferingId) throws GenericException {
+        return ApiResponse.successResponse(availableSlotService.getAvailableSlots(id, date, serviceOfferingId),
+                "Available slots fetched successfully");
     }
 
     private User currentUser() throws GenericException {

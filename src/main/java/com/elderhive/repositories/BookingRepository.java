@@ -24,5 +24,11 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     boolean existsByCaretakerIdAndScheduledDateAndScheduledTimeAndStatusIn(
             Long caretakerId, LocalDate scheduledDate, LocalTime scheduledTime, List<BookingStatusEnum> statuses);
 
+    // Backs AvailableSlotServiceImpl (Prompt 76) - every non-terminal booking this
+    // caretaker already has on a given day, so its scheduled times can be subtracted from
+    // the candidate slots CaretakerAvailability's weekly schedule generates.
+    List<Booking> findByCaretakerIdAndScheduledDateAndStatusIn(
+            Long caretakerId, LocalDate scheduledDate, List<BookingStatusEnum> statuses);
+
     List<Booking> findByRecurringGroupIdOrderByScheduledDateAsc(String recurringGroupId);
 }
