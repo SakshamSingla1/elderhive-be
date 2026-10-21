@@ -1,5 +1,7 @@
 package com.elderhive.controllers;
 
+import com.elderhive.dtos.CaretakerAvailability.CaretakerAvailabilityRequest;
+import com.elderhive.dtos.CaretakerAvailability.CaretakerAvailabilityResponse;
 import com.elderhive.dtos.CaretakerProfile.CaretakerProfileRequest;
 import com.elderhive.dtos.CaretakerProfile.CaretakerProfileResponse;
 import com.elderhive.dtos.CaretakerVerificationDocument.CaretakerVerificationDocumentResponse;
@@ -9,6 +11,7 @@ import com.elderhive.exceptions.GenericException;
 import com.elderhive.payload.ApiResponse;
 import com.elderhive.payload.ResponseModel;
 import com.elderhive.repositories.UserRepository;
+import com.elderhive.services.CaretakerAvailabilityService;
 import com.elderhive.services.CaretakerProfileService;
 import com.elderhive.services.CaretakerVerificationDocumentService;
 import jakarta.validation.Valid;
@@ -19,9 +22,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -43,6 +48,7 @@ public class CaretakerProfileController {
 
     private final CaretakerProfileService caretakerProfileService;
     private final CaretakerVerificationDocumentService caretakerVerificationDocumentService;
+    private final CaretakerAvailabilityService caretakerAvailabilityService;
     private final UserRepository userRepository;
 
     @PreAuthorize("isAuthenticated()")
@@ -95,6 +101,42 @@ public class CaretakerProfileController {
         User caller = currentUser();
         return ApiResponse.successResponse(caretakerVerificationDocumentService.listForCaretaker(id, caller),
                 "Verification documents fetched successfully");
+    }
+
+    /** CARETAKER-only in effect, via the same no-explicit-role-check pattern as upload above. */
+    @PreAuthorize("isAuthenticated()")
+    @PostMapping("/me/availability")
+    public ResponseEntity<ResponseModel<CaretakerAvailabilityResponse>> addAvailabilitySlot(
+            @Valid @RequestBody CaretakerAvailabilityRequest request) throws GenericException {
+        User caller = currentUser();
+        return ApiResponse.createSuccess(caretakerAvailabilityService.create(caller, request), "Availability slot added successfully");
+    }
+
+    /** Public - used by family members browsing/booking a caretaker. */
+    @PreAuthorize("isAuthenticated()")
+    @GetMapping("/{id}/availability")
+    public ResponseEntity<ResponseModel<List<CaretakerAvailabilityResponse>>> getAvailability(@PathVariable Long id)
+            throws GenericException {
+        return ApiResponse.successResponse(caretakerAvailabilityService.getByCaretakerId(id), "Availability fetched successfully");
+    }
+
+    /** Owner (or ADMIN/SUPER_ADMIN) only - enforced in the service layer. */
+    @PreAuthorize("isAuthenticated()")
+    @PutMapping("/me/availability/{slotId}")
+    public ResponseEntity<ResponseModel<CaretakerAvailabilityResponse>> updateAvailabilitySlot(
+            @PathVariable Long slotId, @Valid @RequestBody CaretakerAvailabilityRequest request) throws GenericException {
+        User caller = currentUser();
+        return ApiResponse.successResponse(caretakerAvailabilityService.update(slotId, caller, request),
+                "Availability slot updated successfully");
+    }
+
+    /** Owner (or ADMIN/SUPER_ADMIN) only - enforced in the service layer. */
+    @PreAuthorize("isAuthenticated()")
+    @DeleteMapping("/me/availability/{slotId}")
+    public ResponseEntity<ResponseModel<String>> deleteAvailabilitySlot(@PathVariable Long slotId) throws GenericException {
+        User caller = currentUser();
+        caretakerAvailabilityService.delete(slotId, caller);
+        return ApiResponse.successResponse("Deleted", "Availability slot deleted successfully");
     }
 
     private User currentUser() throws GenericException {
