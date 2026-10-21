@@ -387,9 +387,10 @@ class BookingServiceImplTest {
     // ===== cancel() =====
 
     @Test
-    void cancelAllowsTheFamilyPartyWhilePending() throws GenericException {
+    void cancelAllowsTheFamilyPartyWhilePendingAndNotifiesTheCaretakerNotTheInitiator() throws GenericException {
         Booking existing = booking(100L, BookingStatusEnum.PENDING);
         when(bookingRepository.findById(100L)).thenReturn(Optional.of(existing));
+        when(caretakerProfileRepository.findById(20L)).thenReturn(Optional.of(caretakerProfile(20L, 200L)));
         when(bookingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(elderProfileRepository.findById(10L)).thenReturn(Optional.of(elderProfile(10L, 1L)));
         when(serviceOfferingRepository.findById(30L)).thenReturn(Optional.of(offering(30L)));
@@ -397,14 +398,16 @@ class BookingServiceImplTest {
         BookingResponse response = service.cancel(100L, user(1L, UserTypeEnum.FAMILY_MEMBER), false);
 
         assertThat(response.getStatus()).isEqualTo(BookingStatusEnum.CANCELLED);
-        verify(notificationService).send(eq("BOOKING_CANCELLED"), any(), eq(1L));
+        verify(notificationService).send(eq("BOOKING_CANCELLED"), any(), eq(200L));
+        verify(notificationService, never()).send(eq("BOOKING_CANCELLED"), any(), eq(1L));
     }
 
     @Test
-    void cancelAllowsTheAssignedCaretakerWhilePending() throws GenericException {
+    void cancelAllowsTheAssignedCaretakerWhilePendingAndNotifiesTheFamilyNotTheInitiator() throws GenericException {
         Booking existing = booking(100L, BookingStatusEnum.PENDING);
         when(bookingRepository.findById(100L)).thenReturn(Optional.of(existing));
         when(caretakerProfileRepository.findByUserId(200L)).thenReturn(Optional.of(caretakerProfile(20L, 200L)));
+        when(caretakerProfileRepository.findById(20L)).thenReturn(Optional.of(caretakerProfile(20L, 200L)));
         when(bookingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(elderProfileRepository.findById(10L)).thenReturn(Optional.of(elderProfile(10L, 1L)));
         when(serviceOfferingRepository.findById(30L)).thenReturn(Optional.of(offering(30L)));
@@ -412,6 +415,8 @@ class BookingServiceImplTest {
         BookingResponse response = service.cancel(100L, user(200L, UserTypeEnum.CARETAKER), false);
 
         assertThat(response.getStatus()).isEqualTo(BookingStatusEnum.CANCELLED);
+        verify(notificationService).send(eq("BOOKING_CANCELLED"), any(), eq(1L));
+        verify(notificationService, never()).send(eq("BOOKING_CANCELLED"), any(), eq(200L));
     }
 
     @Test
@@ -432,6 +437,7 @@ class BookingServiceImplTest {
     void cancelStillAllowsTheFamilyPartyOnceTheBookingIsConfirmed() throws GenericException {
         Booking existing = booking(100L, BookingStatusEnum.CONFIRMED);
         when(bookingRepository.findById(100L)).thenReturn(Optional.of(existing));
+        when(caretakerProfileRepository.findById(20L)).thenReturn(Optional.of(caretakerProfile(20L, 200L)));
         when(bookingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(elderProfileRepository.findById(10L)).thenReturn(Optional.of(elderProfile(10L, 1L)));
         when(serviceOfferingRepository.findById(30L)).thenReturn(Optional.of(offering(30L)));
@@ -439,12 +445,14 @@ class BookingServiceImplTest {
         BookingResponse response = service.cancel(100L, user(1L, UserTypeEnum.FAMILY_MEMBER), false);
 
         assertThat(response.getStatus()).isEqualTo(BookingStatusEnum.CANCELLED);
+        verify(notificationService).send(eq("BOOKING_CANCELLED"), any(), eq(200L));
     }
 
     @Test
-    void cancelAllowsAnAdminOverrideRegardlessOfStatus() throws GenericException {
+    void cancelAllowsAnAdminOverrideRegardlessOfStatusAndNotifiesBothParties() throws GenericException {
         Booking existing = booking(100L, BookingStatusEnum.IN_PROGRESS);
         when(bookingRepository.findById(100L)).thenReturn(Optional.of(existing));
+        when(caretakerProfileRepository.findById(20L)).thenReturn(Optional.of(caretakerProfile(20L, 200L)));
         when(bookingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(elderProfileRepository.findById(10L)).thenReturn(Optional.of(elderProfile(10L, 1L)));
         when(serviceOfferingRepository.findById(30L)).thenReturn(Optional.of(offering(30L)));
@@ -452,6 +460,8 @@ class BookingServiceImplTest {
         BookingResponse response = service.cancel(100L, user(999L, UserTypeEnum.ADMIN), false);
 
         assertThat(response.getStatus()).isEqualTo(BookingStatusEnum.CANCELLED);
+        verify(notificationService).send(eq("BOOKING_CANCELLED"), any(), eq(1L));
+        verify(notificationService).send(eq("BOOKING_CANCELLED"), any(), eq(200L));
     }
 
     @Test

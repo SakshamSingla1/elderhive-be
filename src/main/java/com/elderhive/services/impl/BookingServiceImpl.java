@@ -132,7 +132,9 @@ public class BookingServiceImpl implements BookingService {
         assertTransition(booking, BookingStatusEnum.PENDING, BookingStatusEnum.CONFIRMED);
         booking.setStatus(BookingStatusEnum.CONFIRMED);
         Booking saved = bookingRepository.save(booking);
-        notify("BOOKING_CONFIRMED", saved);
+        // The caretaker is always the actor here (assertAssignedCaretakerOrAdmin), so the
+        // family party is the one who doesn't already know.
+        notify("BOOKING_CONFIRMED", saved, saved.getFamilyUserId());
         return toResponse(saved);
     }
 
@@ -156,7 +158,9 @@ public class BookingServiceImpl implements BookingService {
         assertTransition(booking, BookingStatusEnum.IN_PROGRESS, BookingStatusEnum.COMPLETED);
         booking.setStatus(BookingStatusEnum.COMPLETED);
         Booking saved = bookingRepository.save(booking);
-        notify("BOOKING_COMPLETED", saved);
+        // Notifies the family member - this is also what unlocks leaving a review once
+        // Phase 12 lands (a completed booking is the review gate).
+        notify("BOOKING_COMPLETED", saved, saved.getFamilyUserId());
         return toResponse(saved);
     }
 
@@ -180,7 +184,7 @@ public class BookingServiceImpl implements BookingService {
         }
 
         Booking reloaded = findOrThrow(id);
-        notify("BOOKING_CANCELLED", reloaded);
+        notifyCancellation(reloaded, caller);
         return toResponse(reloaded);
     }
 
@@ -284,17 +288,33 @@ public class BookingServiceImpl implements BookingService {
         }
     }
 
-    /** Always targets the family party who made the booking - BOOKING_CONFIRMED/
-     *  CANCELLED/COMPLETED (V16's seed) are single-audience templates with no
-     *  caretaker-facing variant, matching the family member being the one who keeps
-     *  track of a booking's lifecycle across every transition, including a
-     *  caretaker-initiated one. */
-    private void notify(String templateKey, Booking booking) throws GenericException {
+    /** BOOKING_CANCELLED notifies whichever party didn't initiate the cancellation - the
+     *  one who might not already know. A caretaker-initiated cancel notifies the family;
+     *  a family-initiated one (the original owner or any co-manager - "family" is treated
+     *  as one party, not per-individual) notifies the caretaker. An ADMIN override
+     *  initiated as neither party, so both get notified. */
+    private void notifyCancellation(Booking booking, User caller) throws GenericException {
+        Long caretakerUserId = caretakerProfileRepository.findById(booking.getCaretakerId())
+                .map(CaretakerProfile::getUserId).orElse(null);
+
+        if (ADMIN_TIER.contains(caller.getUserType())) {
+            notify("BOOKING_CANCELLED", booking, booking.getFamilyUserId());
+            if (caretakerUserId != null) {
+                notify("BOOKING_CANCELLED", booking, caretakerUserId);
+            }
+        } else if (isAssignedCaretaker(booking, caller)) {
+            notify("BOOKING_CANCELLED", booking, booking.getFamilyUserId());
+        } else if (caretakerUserId != null) {
+            notify("BOOKING_CANCELLED", booking, caretakerUserId);
+        }
+    }
+
+    private void notify(String templateKey, Booking booking, Long targetUserId) throws GenericException {
         Map<String, String> variables = new HashMap<>();
         variables.put("elderName", elderProfileRepository.findById(booking.getElderProfileId()).map(ElderProfile::getFullName).orElse("your elder"));
         variables.put("serviceName", serviceOfferingRepository.findById(booking.getServiceOfferingId()).map(ServiceOffering::getName).orElse("your service"));
         variables.put("bookingDate", String.valueOf(booking.getScheduledDate()));
-        notificationService.send(templateKey, variables, booking.getFamilyUserId());
+        notificationService.send(templateKey, variables, targetUserId);
     }
 
     private BookingResponse toResponse(Booking booking) {
