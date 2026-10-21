@@ -63,7 +63,8 @@ public class GlobalExceptionHandler {
             ExceptionCodeEnum.NOTIFICATION_TEMPLATE_NOT_FOUND,
             ExceptionCodeEnum.NOTIFICATION_NOT_FOUND,
             ExceptionCodeEnum.ELDER_PROFILE_NOT_FOUND,
-            ExceptionCodeEnum.ELDER_PROFILE_LINK_INVITE_NOT_FOUND
+            ExceptionCodeEnum.ELDER_PROFILE_LINK_INVITE_NOT_FOUND,
+            ExceptionCodeEnum.CARETAKER_PROFILE_NOT_FOUND
     );
 
     @ExceptionHandler(GenericException.class)
