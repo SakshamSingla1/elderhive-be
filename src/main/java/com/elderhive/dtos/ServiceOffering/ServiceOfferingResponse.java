@@ -18,6 +18,7 @@ public class ServiceOfferingResponse {
     private Long id;
     private String name;
     private Long categoryId;
+    private String categoryName;
     private String description;
     private BigDecimal basePrice;
     private Integer durationMinutes;

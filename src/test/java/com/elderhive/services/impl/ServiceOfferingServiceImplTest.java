@@ -23,6 +23,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -110,13 +112,36 @@ class ServiceOfferingServiceImplTest {
     }
 
     @Test
-    void getAllReturnsEveryOffering() {
-        when(serviceOfferingRepository.findAll(any(org.springframework.data.domain.Pageable.class)))
+    void getAllReturnsEveryOfferingWhenNoFiltersAreGiven() {
+        when(serviceOfferingRepository.findByCriteria(isNull(), isNull(), any(org.springframework.data.domain.Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(offering(1L, "Temple Visit Service", 1L))));
 
-        var page = service.getAll(PageRequest.of(0, 10));
+        var page = service.getAll(null, null, PageRequest.of(0, 10));
 
         assertThat(page.getContent()).hasSize(1);
+    }
+
+    @Test
+    void getAllFiltersByCategoryIdAndStatusWhenGiven() {
+        when(serviceOfferingRepository.findByCriteria(eq(1L), eq(ServiceOfferingStatusEnum.ACTIVE), any(org.springframework.data.domain.Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(offering(1L, "Temple Visit Service", 1L))));
+
+        var page = service.getAll(1L, ServiceOfferingStatusEnum.ACTIVE, PageRequest.of(0, 10));
+
+        assertThat(page.getContent()).hasSize(1);
+        verify(serviceOfferingRepository).findByCriteria(eq(1L), eq(ServiceOfferingStatusEnum.ACTIVE), any());
+    }
+
+    @Test
+    void getAllDenormalizesTheCategoryNameOntoEachOffering() {
+        when(serviceOfferingRepository.findByCriteria(isNull(), isNull(), any(org.springframework.data.domain.Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(offering(1L, "Temple Visit Service", 1L))));
+        when(serviceCategoryRepository.findById(1L)).thenReturn(Optional.of(
+                com.elderhive.entities.ServiceCategory.builder().id(1L).name("Temple Visit").build()));
+
+        var page = service.getAll(null, null, PageRequest.of(0, 10));
+
+        assertThat(page.getContent().get(0).getCategoryName()).isEqualTo("Temple Visit");
     }
 
     @Test

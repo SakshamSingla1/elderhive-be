@@ -2,6 +2,7 @@ package com.elderhive.services.impl;
 
 import com.elderhive.dtos.ServiceOffering.ServiceOfferingRequest;
 import com.elderhive.dtos.ServiceOffering.ServiceOfferingResponse;
+import com.elderhive.entities.ServiceCategory;
 import com.elderhive.entities.ServiceOffering;
 import com.elderhive.enums.ExceptionCodeEnum;
 import com.elderhive.enums.ServiceOfferingStatusEnum;
@@ -61,8 +62,8 @@ public class ServiceOfferingServiceImpl implements ServiceOfferingService {
     }
 
     @Override
-    public Page<ServiceOfferingResponse> getAll(Pageable pageable) {
-        return serviceOfferingRepository.findAll(pageable).map(this::toResponse);
+    public Page<ServiceOfferingResponse> getAll(Long categoryId, ServiceOfferingStatusEnum status, Pageable pageable) {
+        return serviceOfferingRepository.findByCriteria(categoryId, status, pageable).map(this::toResponse);
     }
 
     @Override
@@ -86,10 +87,14 @@ public class ServiceOfferingServiceImpl implements ServiceOfferingService {
     }
 
     private ServiceOfferingResponse toResponse(ServiceOffering offering) {
+        String categoryName = serviceCategoryRepository.findById(offering.getCategoryId())
+                .map(ServiceCategory::getName)
+                .orElse(null);
         return ServiceOfferingResponse.builder()
                 .id(offering.getId())
                 .name(offering.getName())
                 .categoryId(offering.getCategoryId())
+                .categoryName(categoryName)
                 .description(offering.getDescription())
                 .basePrice(offering.getBasePrice())
                 .durationMinutes(offering.getDurationMinutes())

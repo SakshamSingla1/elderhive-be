@@ -58,8 +58,8 @@ public class ServiceCategoryServiceImpl implements ServiceCategoryService {
     }
 
     @Override
-    public Page<ServiceCategoryResponse> getAll(Pageable pageable) {
-        return serviceCategoryRepository.findAll(pageable).map(this::toResponse);
+    public Page<ServiceCategoryResponse> getAll(ServiceCategoryStatusEnum status, Pageable pageable) {
+        return serviceCategoryRepository.findByCriteria(status, pageable).map(this::toResponse);
     }
 
     @Override

@@ -2,6 +2,7 @@ package com.elderhive.services;
 
 import com.elderhive.dtos.ServiceCategory.ServiceCategoryRequest;
 import com.elderhive.dtos.ServiceCategory.ServiceCategoryResponse;
+import com.elderhive.enums.ServiceCategoryStatusEnum;
 import com.elderhive.exceptions.GenericException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -14,7 +15,7 @@ public interface ServiceCategoryService {
 
     ServiceCategoryResponse getById(Long id) throws GenericException;
 
-    Page<ServiceCategoryResponse> getAll(Pageable pageable);
+    Page<ServiceCategoryResponse> getAll(ServiceCategoryStatusEnum status, Pageable pageable);
 
     void delete(Long id) throws GenericException;
 }

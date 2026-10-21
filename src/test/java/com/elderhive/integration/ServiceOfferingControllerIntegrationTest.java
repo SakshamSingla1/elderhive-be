@@ -90,6 +90,7 @@ class ServiceOfferingControllerIntegrationTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.name").value("Weekly Temple Visit"))
                 .andExpect(jsonPath("$.data.categoryId").value(categoryId))
+                .andExpect(jsonPath("$.data.categoryName").value("svcoffer-crud-Temple Visit"))
                 .andExpect(jsonPath("$.data.status").value("ACTIVE"))
                 .andReturn();
         Long id = objectMapper.readTree(createResult.getResponse().getContentAsString()).get("data").get("id").asLong();
@@ -135,11 +136,41 @@ class ServiceOfferingControllerIntegrationTest {
     }
 
     @Test
-    void aNonAdminCallerIsForbidden() throws Exception {
+    void aNonAdminCallerCanBrowseButNotMutate() throws Exception {
+        Long categoryId = persistCategory("svcoffer-family-Temple Visit");
+        Cookie adminCookie = loginCookieFor(persistServiceManagingAdmin("svcoffer-family-admin@example.com"));
+        MvcResult createResult = mockMvc.perform(post("/api/v1/service-offerings").cookie(adminCookie)
+                        .contentType("application/json").content(offeringJson("Weekly Temple Visit", categoryId)))
+                .andReturn();
+        Long id = objectMapper.readTree(createResult.getResponse().getContentAsString()).get("data").get("id").asLong();
+
         Cookie cookie = loginCookieFor(persistFamilyMember("svcoffer-family@example.com"));
 
         mockMvc.perform(get("/api/v1/service-offerings").cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content").isArray());
+        mockMvc.perform(get("/api/v1/service-offerings/" + id).cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.categoryName").value("svcoffer-family-Temple Visit"));
+        mockMvc.perform(post("/api/v1/service-offerings").cookie(cookie)
+                        .contentType("application/json").content(offeringJson("X", categoryId)))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void theListCanBeFilteredByCategoryIdAndStatus() throws Exception {
+        Cookie cookie = loginCookieFor(persistServiceManagingAdmin("svcoffer-filter-admin@example.com"));
+        Long categoryA = persistCategory("svcoffer-filter-Temple Visit");
+        Long categoryB = persistCategory("svcoffer-filter-Hospital Visit");
+        mockMvc.perform(post("/api/v1/service-offerings").cookie(cookie)
+                .contentType("application/json").content(offeringJson("svcoffer-filter-Offering A", categoryA)));
+        mockMvc.perform(post("/api/v1/service-offerings").cookie(cookie)
+                .contentType("application/json").content(offeringJson("svcoffer-filter-Offering B", categoryB)));
+
+        mockMvc.perform(get("/api/v1/service-offerings").cookie(cookie).param("categoryId", String.valueOf(categoryA)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[?(@.name == 'svcoffer-filter-Offering A')]").exists())
+                .andExpect(jsonPath("$.data.content[?(@.name == 'svcoffer-filter-Offering B')]").doesNotExist());
     }
 
     @Test

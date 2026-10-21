@@ -77,6 +77,26 @@ class ServiceOfferingRepositoryTest {
     }
 
     @Test
+    void findByCriteriaFiltersByCategoryIdAndStatus() {
+        ServiceCategory categoryA = persistCategory("criteria-Temple Visit");
+        ServiceCategory categoryB = persistCategory("criteria-Hospital Visit");
+        serviceOfferingRepository.save(ServiceOffering.builder()
+                .name("criteria-Offering A").categoryId(categoryA.getId()).status(ServiceOfferingStatusEnum.ACTIVE).build());
+        serviceOfferingRepository.save(ServiceOffering.builder()
+                .name("criteria-Offering B").categoryId(categoryB.getId()).status(ServiceOfferingStatusEnum.INACTIVE).build());
+        entityManager.flush();
+
+        var byCategory = serviceOfferingRepository.findByCriteria(categoryA.getId(), null, org.springframework.data.domain.PageRequest.of(0, 100));
+        assertThat(byCategory.getContent()).extracting(ServiceOffering::getName).containsExactly("criteria-Offering A");
+
+        var byStatus = serviceOfferingRepository.findByCriteria(null, ServiceOfferingStatusEnum.INACTIVE, org.springframework.data.domain.PageRequest.of(0, 100));
+        assertThat(byStatus.getContent()).extracting(ServiceOffering::getName).containsExactly("criteria-Offering B");
+
+        var all = serviceOfferingRepository.findByCriteria(null, null, org.springframework.data.domain.PageRequest.of(0, 100));
+        assertThat(all.getContent()).extracting(ServiceOffering::getName).contains("criteria-Offering A", "criteria-Offering B");
+    }
+
+    @Test
     void anOfferingCanBeDeletedWithoutAffectingItsCategory() {
         ServiceCategory category = persistCategory("offering-delete-Temple Visit");
         ServiceOffering saved = serviceOfferingRepository.save(ServiceOffering.builder()

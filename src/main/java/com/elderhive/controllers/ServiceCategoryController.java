@@ -2,6 +2,7 @@ package com.elderhive.controllers;
 
 import com.elderhive.dtos.ServiceCategory.ServiceCategoryRequest;
 import com.elderhive.dtos.ServiceCategory.ServiceCategoryResponse;
+import com.elderhive.enums.ServiceCategoryStatusEnum;
 import com.elderhive.exceptions.GenericException;
 import com.elderhive.payload.ApiResponse;
 import com.elderhive.payload.ResponseModel;
@@ -19,12 +20,15 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Admin CRUD, gated by SERVICE_MANAGE via AdminPermissionGuard (same shape as
- * NavLinkController's own NAVLINK_MANAGE-gated endpoints) - SUPER_ADMIN still reaches
- * these too, since the guard unconditionally grants SUPER_ADMIN regardless of permission.
+ * Mutations and single-category lookups stay admin CRUD, gated by SERVICE_MANAGE via
+ * AdminPermissionGuard (same shape as NavLinkController's own NAVLINK_MANAGE-gated
+ * endpoints) - SUPER_ADMIN still reaches these too, since the guard unconditionally grants
+ * SUPER_ADMIN regardless of permission. The list endpoint is opened to any authenticated
+ * caller (Prompt 73) to power the family-facing browse view.
  */
 @RestController
 @RequestMapping("/api/v1/service-categories")
@@ -54,10 +58,11 @@ public class ServiceCategoryController {
         return ApiResponse.successResponse(serviceCategoryService.getById(id), "Service category fetched successfully");
     }
 
-    @PreAuthorize("hasRole('ADMIN') and @adminPermissionGuard.has('SERVICE_MANAGE')")
+    @PreAuthorize("isAuthenticated()")
     @GetMapping
-    public ResponseEntity<ResponseModel<Page<ServiceCategoryResponse>>> getAll(Pageable pageable) {
-        return ApiResponse.successResponse(serviceCategoryService.getAll(pageable), "Service categories fetched successfully");
+    public ResponseEntity<ResponseModel<Page<ServiceCategoryResponse>>> getAll(
+            @RequestParam(required = false) ServiceCategoryStatusEnum status, Pageable pageable) {
+        return ApiResponse.successResponse(serviceCategoryService.getAll(status, pageable), "Service categories fetched successfully");
     }
 
     @PreAuthorize("hasRole('ADMIN') and @adminPermissionGuard.has('SERVICE_MANAGE')")

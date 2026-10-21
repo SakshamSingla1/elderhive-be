@@ -65,6 +65,19 @@ class ServiceCategoryRepositoryTest {
     }
 
     @Test
+    void findByCriteriaFiltersByStatusAndReturnsEverythingWhenStatusIsNull() {
+        serviceCategoryRepository.save(ServiceCategory.builder().name("criteria-Active One").status(ServiceCategoryStatusEnum.ACTIVE).build());
+        serviceCategoryRepository.save(ServiceCategory.builder().name("criteria-Inactive One").status(ServiceCategoryStatusEnum.INACTIVE).build());
+        entityManager.flush();
+
+        var activeOnly = serviceCategoryRepository.findByCriteria(ServiceCategoryStatusEnum.ACTIVE, org.springframework.data.domain.PageRequest.of(0, 100));
+        assertThat(activeOnly.getContent()).extracting(ServiceCategory::getName).contains("criteria-Active One").doesNotContain("criteria-Inactive One");
+
+        var all = serviceCategoryRepository.findByCriteria(null, org.springframework.data.domain.PageRequest.of(0, 100));
+        assertThat(all.getContent()).extracting(ServiceCategory::getName).contains("criteria-Active One", "criteria-Inactive One");
+    }
+
+    @Test
     void theStarterSeedSetFromPrompt71IsPresent() {
         assertThat(serviceCategoryRepository.findByName("Temple Visit")).isPresent();
         assertThat(serviceCategoryRepository.findByName("Hospital Visit")).isPresent();

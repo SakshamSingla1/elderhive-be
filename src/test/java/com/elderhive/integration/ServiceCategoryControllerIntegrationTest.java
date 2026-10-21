@@ -128,10 +128,12 @@ class ServiceCategoryControllerIntegrationTest {
     }
 
     @Test
-    void aPlainAdminWithNoRoleAssignedIsForbidden() throws Exception {
+    void aPlainAdminWithNoRoleAssignedIsForbiddenFromMutatingButCanStillBrowse() throws Exception {
         Cookie cookie = loginCookieFor(persistPlainAdmin("svccat-norole-admin@example.com"));
 
         mockMvc.perform(get("/api/v1/service-categories").cookie(cookie))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/service-categories/1").cookie(cookie))
                 .andExpect(status().isForbidden());
         mockMvc.perform(post("/api/v1/service-categories").cookie(cookie)
                         .contentType("application/json").content(categoryJson("X")))
@@ -139,11 +141,28 @@ class ServiceCategoryControllerIntegrationTest {
     }
 
     @Test
-    void aNonAdminCallerIsForbidden() throws Exception {
+    void aNonAdminCallerCanBrowseTheListButNotMutateOrFetchASingleCategory() throws Exception {
         Cookie cookie = loginCookieFor(persistFamilyMember("svccat-family@example.com"));
 
         mockMvc.perform(get("/api/v1/service-categories").cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content").isArray());
+        mockMvc.perform(get("/api/v1/service-categories/1").cookie(cookie))
                 .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/service-categories").cookie(cookie)
+                        .contentType("application/json").content(categoryJson("Y")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void theListCanBeFilteredByStatus() throws Exception {
+        Cookie cookie = loginCookieFor(persistServiceManagingAdmin("svccat-filter-admin@example.com"));
+        mockMvc.perform(post("/api/v1/service-categories").cookie(cookie)
+                .contentType("application/json").content("{\"name\":\"svccat-filter-Inactive One\",\"status\":\"INACTIVE\"}"));
+
+        mockMvc.perform(get("/api/v1/service-categories").cookie(cookie).param("status", "INACTIVE"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[?(@.name == 'svccat-filter-Inactive One')]").exists());
     }
 
     @Test
