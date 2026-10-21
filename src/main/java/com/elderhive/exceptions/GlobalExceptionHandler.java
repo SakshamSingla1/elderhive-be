@@ -54,7 +54,8 @@ public class GlobalExceptionHandler {
     private static final Set<ExceptionCodeEnum> CONFLICT_CODES = Set.of(
             ExceptionCodeEnum.CONFLICT,
             ExceptionCodeEnum.DUPLICATE_EMAIL,
-            ExceptionCodeEnum.COLOR_THEME_ALREADY_EXISTS
+            ExceptionCodeEnum.COLOR_THEME_ALREADY_EXISTS,
+            ExceptionCodeEnum.SERVICE_CATEGORY_ALREADY_EXISTS
     );
 
     private static final Set<ExceptionCodeEnum> NOT_FOUND_CODES = Set.of(
@@ -67,7 +68,8 @@ public class GlobalExceptionHandler {
             ExceptionCodeEnum.ELDER_PROFILE_LINK_INVITE_NOT_FOUND,
             ExceptionCodeEnum.CARETAKER_PROFILE_NOT_FOUND,
             ExceptionCodeEnum.FILE_NOT_FOUND,
-            ExceptionCodeEnum.CARETAKER_VERIFICATION_DOCUMENT_NOT_FOUND
+            ExceptionCodeEnum.CARETAKER_VERIFICATION_DOCUMENT_NOT_FOUND,
+            ExceptionCodeEnum.SERVICE_CATEGORY_NOT_FOUND
     );
 
     @ExceptionHandler(GenericException.class)
