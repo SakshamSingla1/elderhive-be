@@ -370,4 +370,61 @@ class BookingControllerIntegrationTest {
         mockMvc.perform(get("/api/v1/bookings/999999999").cookie(loginCookieFor(family)))
                 .andExpect(status().isNotFound());
     }
+
+    // ===== admin oversight: GET (list) / PUT admin-override-status (Prompt 80) =====
+
+    @Test
+    void anAdminWithBookingManageCanListEveryBookingAndFilterByStatus() throws Exception {
+        Fixture f = setUpBookableFixture("adminlist");
+        mockMvc.perform(post("/api/v1/bookings").cookie(f.familyCookie())
+                .contentType("application/json")
+                .content(bookingJson(f.elderProfileId(), f.caretakerId(), f.offeringId(), "09:00:00")));
+        Cookie adminCookie = loginCookieFor(persistAdmin("adminlist-admin@example.com"));
+
+        mockMvc.perform(get("/api/v1/bookings").cookie(adminCookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[?(@.caretakerId == " + f.caretakerId() + ")]").exists());
+
+        mockMvc.perform(get("/api/v1/bookings").cookie(adminCookie).param("status", "CONFIRMED"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[?(@.caretakerId == " + f.caretakerId() + ")]").doesNotExist());
+    }
+
+    @Test
+    void aNonAdminCannotListAllBookings() throws Exception {
+        User family = persistUser("adminlist-forbidden-family@example.com", UserTypeEnum.FAMILY_MEMBER);
+
+        mockMvc.perform(get("/api/v1/bookings").cookie(loginCookieFor(family)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void anAdminCanOverrideABookingDirectlyFromPendingToCompletedBypassingTheLifecycleGate() throws Exception {
+        Fixture f = setUpBookableFixture("adminoverridejump");
+        MvcResult createResult = mockMvc.perform(post("/api/v1/bookings").cookie(f.familyCookie())
+                        .contentType("application/json")
+                        .content(bookingJson(f.elderProfileId(), f.caretakerId(), f.offeringId(), "09:00:00")))
+                .andReturn();
+        Long id = objectMapper.readTree(createResult.getResponse().getContentAsString()).get("data").get("id").asLong();
+        Cookie adminCookie = loginCookieFor(persistAdmin("adminoverridejump-admin@example.com"));
+
+        mockMvc.perform(put("/api/v1/bookings/" + id + "/admin-override-status").cookie(adminCookie)
+                        .contentType("application/json").content("{\"status\":\"COMPLETED\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"));
+    }
+
+    @Test
+    void aCaretakerCannotUseTheAdminOverrideEndpoint() throws Exception {
+        Fixture f = setUpBookableFixture("adminoverrideforbidden");
+        MvcResult createResult = mockMvc.perform(post("/api/v1/bookings").cookie(f.familyCookie())
+                        .contentType("application/json")
+                        .content(bookingJson(f.elderProfileId(), f.caretakerId(), f.offeringId(), "09:00:00")))
+                .andReturn();
+        Long id = objectMapper.readTree(createResult.getResponse().getContentAsString()).get("data").get("id").asLong();
+
+        mockMvc.perform(put("/api/v1/bookings/" + id + "/admin-override-status").cookie(f.caretakerCookie())
+                        .contentType("application/json").content("{\"status\":\"COMPLETED\"}"))
+                .andExpect(status().isForbidden());
+    }
 }

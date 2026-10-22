@@ -3,6 +3,7 @@ package com.elderhive.services;
 import com.elderhive.dtos.Booking.BookingRequest;
 import com.elderhive.dtos.Booking.BookingResponse;
 import com.elderhive.entities.User;
+import com.elderhive.enums.BookingStatusEnum;
 import com.elderhive.exceptions.GenericException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -51,4 +52,16 @@ public interface BookingService {
     /** Every booking sharing recurringGroupId, oldest occurrence first. Caller must be the
      *  family party or assigned caretaker of that series, or ADMIN/SUPER_ADMIN. */
     List<BookingResponse> getByRecurringGroupId(String recurringGroupId, User caller) throws GenericException;
+
+    /** Admin oversight - every booking on the platform, optionally filtered. Controller-
+     *  gated BOOKING_MANAGE, no further ownership check here. */
+    Page<BookingResponse> getAll(Long familyUserId, Long caretakerId, BookingStatusEnum status, Pageable pageable);
+
+    /** Admin-only override (BOOKING_MANAGE-gated at the controller) - sets the booking to
+     *  ANY status directly, bypassing confirm/start/complete/cancel's own linear-lifecycle
+     *  gate entirely. Sends the matching BOOKING_CONFIRMED/COMPLETED/CANCELLED
+     *  notification when the new status has one (CANCELLED notifies both parties, since an
+     *  admin override wasn't initiated by either); PENDING/IN_PROGRESS send nothing, same
+     *  as the regular lifecycle actions. */
+    BookingResponse adminOverrideStatus(Long id, BookingStatusEnum status, User caller) throws GenericException;
 }

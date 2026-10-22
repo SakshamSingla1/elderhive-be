@@ -593,4 +593,70 @@ class BookingServiceImplTest {
 
         assertThat(result).hasSize(2);
     }
+
+    // ===== getAll() / adminOverrideStatus() =====
+
+    @Test
+    void getAllDelegatesToTheRepositorysCriteriaQueryWithEveryFilter() {
+        when(bookingRepository.findByCriteria(eq(1L), eq(20L), eq(BookingStatusEnum.PENDING), any()))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(booking(100L, BookingStatusEnum.PENDING))));
+
+        var page = service.getAll(1L, 20L, BookingStatusEnum.PENDING, org.springframework.data.domain.PageRequest.of(0, 10));
+
+        assertThat(page.getContent()).hasSize(1);
+        verify(bookingRepository).findByCriteria(eq(1L), eq(20L), eq(BookingStatusEnum.PENDING), any());
+    }
+
+    @Test
+    void adminOverrideStatusSetsAnyStatusDirectlyBypassingTheLinearLifecycleGate() throws GenericException {
+        Booking existing = booking(100L, BookingStatusEnum.PENDING);
+        when(bookingRepository.findById(100L)).thenReturn(Optional.of(existing));
+        when(bookingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(elderProfileRepository.findById(10L)).thenReturn(Optional.of(elderProfile(10L, 1L)));
+        when(serviceOfferingRepository.findById(30L)).thenReturn(Optional.of(offering(30L)));
+
+        // PENDING straight to COMPLETED - confirm()/start() would both reject this.
+        BookingResponse response = service.adminOverrideStatus(100L, BookingStatusEnum.COMPLETED, user(999L, UserTypeEnum.ADMIN));
+
+        assertThat(response.getStatus()).isEqualTo(BookingStatusEnum.COMPLETED);
+        verify(notificationService).send(eq("BOOKING_COMPLETED"), any(), eq(1L));
+    }
+
+    @Test
+    void adminOverrideStatusToCancelledNotifiesBothParties() throws GenericException {
+        Booking existing = booking(100L, BookingStatusEnum.CONFIRMED);
+        when(bookingRepository.findById(100L)).thenReturn(Optional.of(existing));
+        when(bookingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(caretakerProfileRepository.findById(20L)).thenReturn(Optional.of(caretakerProfile(20L, 200L)));
+        when(elderProfileRepository.findById(10L)).thenReturn(Optional.of(elderProfile(10L, 1L)));
+        when(serviceOfferingRepository.findById(30L)).thenReturn(Optional.of(offering(30L)));
+
+        service.adminOverrideStatus(100L, BookingStatusEnum.CANCELLED, user(999L, UserTypeEnum.ADMIN));
+
+        verify(notificationService).send(eq("BOOKING_CANCELLED"), any(), eq(1L));
+        verify(notificationService).send(eq("BOOKING_CANCELLED"), any(), eq(200L));
+    }
+
+    @Test
+    void adminOverrideStatusToPendingSendsNoNotification() throws GenericException {
+        Booking existing = booking(100L, BookingStatusEnum.CONFIRMED);
+        when(bookingRepository.findById(100L)).thenReturn(Optional.of(existing));
+        when(bookingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(elderProfileRepository.findById(10L)).thenReturn(Optional.of(elderProfile(10L, 1L)));
+        when(serviceOfferingRepository.findById(30L)).thenReturn(Optional.of(offering(30L)));
+
+        service.adminOverrideStatus(100L, BookingStatusEnum.PENDING, user(999L, UserTypeEnum.ADMIN));
+
+        verify(notificationService, never()).send(anyString(), any(), any());
+    }
+
+    @Test
+    void adminOverrideStatusThrowsBookingNotFoundForAnUnknownBooking() {
+        when(bookingRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.adminOverrideStatus(999L, BookingStatusEnum.CANCELLED, user(999L, UserTypeEnum.ADMIN)))
+                .isInstanceOf(GenericException.class)
+                .extracting(ex -> ((GenericException) ex).getExceptionCode())
+                .isEqualTo(ExceptionCodeEnum.BOOKING_NOT_FOUND);
+    }
 }

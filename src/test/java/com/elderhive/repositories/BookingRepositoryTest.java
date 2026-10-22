@@ -274,6 +274,34 @@ class BookingRepositoryTest {
     }
 
     @Test
+    void findByCriteriaFiltersByEveryCombinationOfFamilyUserIdCaretakerIdAndStatus() {
+        User familyA = persistUser("booking-criteria-familyA@example.com", UserTypeEnum.FAMILY_MEMBER);
+        User familyB = persistUser("booking-criteria-familyB@example.com", UserTypeEnum.FAMILY_MEMBER);
+        User caretakerUserA = persistUser("booking-criteria-caretakerA@example.com", UserTypeEnum.CARETAKER);
+        User caretakerUserB = persistUser("booking-criteria-caretakerB@example.com", UserTypeEnum.CARETAKER);
+        ElderProfile elderA = persistElderProfile(familyA.getId());
+        ElderProfile elderB = persistElderProfile(familyB.getId());
+        CaretakerProfile caretakerA = persistCaretakerProfile(caretakerUserA.getId());
+        CaretakerProfile caretakerB = persistCaretakerProfile(caretakerUserB.getId());
+        ServiceOffering offering = persistServiceOffering("booking-criteria");
+
+        bookingRepository.save(newBooking(familyA.getId(), elderA.getId(), caretakerA.getId(), offering.getId())
+                .status(BookingStatusEnum.PENDING).build());
+        bookingRepository.save(newBooking(familyB.getId(), elderB.getId(), caretakerB.getId(), offering.getId())
+                .status(BookingStatusEnum.CONFIRMED).build());
+        entityManager.flush();
+
+        assertThat(bookingRepository.findByCriteria(familyA.getId(), null, null, PageRequest.of(0, 10)).getContent())
+                .extracting(Booking::getFamilyUserId).containsExactly(familyA.getId());
+        assertThat(bookingRepository.findByCriteria(null, caretakerB.getId(), null, PageRequest.of(0, 10)).getContent())
+                .extracting(Booking::getCaretakerId).containsExactly(caretakerB.getId());
+        assertThat(bookingRepository.findByCriteria(null, null, BookingStatusEnum.PENDING, PageRequest.of(0, 10)).getContent())
+                .extracting(Booking::getFamilyUserId).containsExactly(familyA.getId());
+        assertThat(bookingRepository.findByCriteria(null, null, null, PageRequest.of(0, 10)).getContent())
+                .extracting(Booking::getFamilyUserId).containsExactlyInAnyOrder(familyA.getId(), familyB.getId());
+    }
+
+    @Test
     void savingABookingWithAnUnknownServiceOfferingFailsTheForeignKey() {
         User family = persistUser("booking-badoffering-family@example.com", UserTypeEnum.FAMILY_MEMBER);
         User caretakerUser = persistUser("booking-badoffering-caretaker@example.com", UserTypeEnum.CARETAKER);

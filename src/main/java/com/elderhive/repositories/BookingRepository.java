@@ -5,6 +5,8 @@ import com.elderhive.enums.BookingStatusEnum;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
@@ -13,6 +15,20 @@ import java.util.List;
 
 @Repository
 public interface BookingRepository extends JpaRepository<Booking, Long> {
+
+    // Backs the admin oversight listing (BookingController#getAll, Prompt 80) - no ORDER
+    // BY here, matching ColorThemeRepository's own nullable-predicate precedent; sorting
+    // is left entirely to the caller's Pageable (the FE always sends scheduledDate,desc).
+    @Query("""
+            SELECT b FROM Booking b
+            WHERE (:familyUserId IS NULL OR b.familyUserId = :familyUserId)
+            AND (:caretakerId IS NULL OR b.caretakerId = :caretakerId)
+            AND (:status IS NULL OR b.status = :status)
+    """)
+    Page<Booking> findByCriteria(@Param("familyUserId") Long familyUserId,
+                                  @Param("caretakerId") Long caretakerId,
+                                  @Param("status") BookingStatusEnum status,
+                                  Pageable pageable);
 
     Page<Booking> findByFamilyUserId(Long familyUserId, Pageable pageable);
 

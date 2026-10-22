@@ -2,7 +2,9 @@ package com.elderhive.controllers;
 
 import com.elderhive.dtos.Booking.BookingRequest;
 import com.elderhive.dtos.Booking.BookingResponse;
+import com.elderhive.dtos.Booking.BookingStatusUpdateRequest;
 import com.elderhive.entities.User;
+import com.elderhive.enums.BookingStatusEnum;
 import com.elderhive.enums.ExceptionCodeEnum;
 import com.elderhive.exceptions.GenericException;
 import com.elderhive.payload.ApiResponse;
@@ -103,6 +105,27 @@ public class BookingController {
             throws GenericException {
         return ApiResponse.successResponse(bookingService.getByRecurringGroupId(recurringGroupId, currentUser()),
                 "Recurring booking series fetched successfully");
+    }
+
+    /** Admin oversight - every booking on the platform, optionally filtered. */
+    @PreAuthorize("hasRole('ADMIN') and @adminPermissionGuard.has('BOOKING_MANAGE')")
+    @GetMapping
+    public ResponseEntity<ResponseModel<Page<BookingResponse>>> getAll(
+            @RequestParam(required = false) Long familyUserId,
+            @RequestParam(required = false) Long caretakerId,
+            @RequestParam(required = false) BookingStatusEnum status,
+            Pageable pageable) {
+        return ApiResponse.successResponse(bookingService.getAll(familyUserId, caretakerId, status, pageable), "Bookings fetched successfully");
+    }
+
+    /** Admin-only override - sets a booking to ANY status directly, bypassing the regular
+     *  lifecycle actions' linear-transition gate entirely. */
+    @PreAuthorize("hasRole('ADMIN') and @adminPermissionGuard.has('BOOKING_MANAGE')")
+    @PutMapping("/{id}/admin-override-status")
+    public ResponseEntity<ResponseModel<BookingResponse>> adminOverrideStatus(
+            @PathVariable Long id, @Valid @RequestBody BookingStatusUpdateRequest request) throws GenericException {
+        return ApiResponse.successResponse(bookingService.adminOverrideStatus(id, request.getStatus(), currentUser()),
+                "Booking status overridden successfully");
     }
 
     private User currentUser() throws GenericException {

@@ -217,6 +217,29 @@ public class BookingServiceImpl implements BookingService {
         return series.stream().map(this::toResponse).collect(Collectors.toList());
     }
 
+    @Override
+    public Page<BookingResponse> getAll(Long familyUserId, Long caretakerId, BookingStatusEnum status, Pageable pageable) {
+        return bookingRepository.findByCriteria(familyUserId, caretakerId, status, pageable).map(this::toResponse);
+    }
+
+    @Override
+    @Transactional
+    public BookingResponse adminOverrideStatus(Long id, BookingStatusEnum status, User caller) throws GenericException {
+        Booking booking = findOrThrow(id);
+        booking.setStatus(status);
+        Booking saved = bookingRepository.save(booking);
+
+        switch (status) {
+            case CONFIRMED -> notify("BOOKING_CONFIRMED", saved, saved.getFamilyUserId());
+            case COMPLETED -> notify("BOOKING_COMPLETED", saved, saved.getFamilyUserId());
+            case CANCELLED -> notifyCancellation(saved, caller);
+            default -> {
+                // PENDING/IN_PROGRESS - no seeded template, same as start()'s own precedent.
+            }
+        }
+        return toResponse(saved);
+    }
+
     private Booking findOrThrow(Long id) throws GenericException {
         return bookingRepository.findById(id)
                 .orElseThrow(() -> new GenericException(ExceptionCodeEnum.BOOKING_NOT_FOUND, "Booking not found"));
