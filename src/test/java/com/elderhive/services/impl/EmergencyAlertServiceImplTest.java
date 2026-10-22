@@ -35,6 +35,9 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -77,6 +80,8 @@ class EmergencyAlertServiceImplTest {
     private AdminPermissionGuard adminPermissionGuard;
     @Mock
     private NominatimGeocodingClient nominatimGeocodingClient;
+    @Mock
+    private SimpMessagingTemplate messagingTemplate;
     @Spy
     private ObjectMapper objectMapper = new ObjectMapper();
 
@@ -531,5 +536,93 @@ class EmergencyAlertServiceImplTest {
         service.findNearbyActiveAlerts(caller(200L, UserTypeEnum.CARETAKER));
 
         verify(emergencyAlertRepository).findByStatusIn(List.of(EmergencyAlertStatusEnum.TRIGGERED, EmergencyAlertStatusEnum.ACKNOWLEDGED));
+    }
+
+    // ==== live broadcast (/topic/emergency-alerts) ====
+
+    @Test
+    void claimBroadcastsTheUpdatedAlertToTheLiveTopic() throws GenericException {
+        when(emergencyAlertRepository.findById(500L)).thenReturn(Optional.of(existingAlert(EmergencyAlertStatusEnum.TRIGGERED, null, LocalDateTime.now())));
+        when(caretakerProfileRepository.findByUserId(200L)).thenReturn(Optional.of(CaretakerProfile.builder().id(30L).userId(200L).build()));
+        when(elderProfileRepository.findById(ELDER_PROFILE_ID)).thenReturn(Optional.of(elderProfile()));
+        stubEscalationTimeoutMinutes(15);
+        stubSave();
+
+        service.claim(500L, caller(200L, UserTypeEnum.CARETAKER));
+
+        ArgumentCaptor<EmergencyAlertResponse> captor = ArgumentCaptor.forClass(EmergencyAlertResponse.class);
+        verify(messagingTemplate).convertAndSend(eq("/topic/emergency-alerts"), captor.capture());
+        assertThat(captor.getValue().getStatus()).isEqualTo(EmergencyAlertStatusEnum.ACKNOWLEDGED);
+    }
+
+    @Test
+    void resolveBroadcastsTheUpdatedAlertToTheLiveTopic() throws GenericException {
+        when(emergencyAlertRepository.findById(500L)).thenReturn(Optional.of(existingAlert(EmergencyAlertStatusEnum.ACKNOWLEDGED, 30L, LocalDateTime.now())));
+        when(caretakerProfileRepository.findByUserId(200L)).thenReturn(Optional.of(CaretakerProfile.builder().id(30L).userId(200L).build()));
+        when(elderProfileRepository.findById(ELDER_PROFILE_ID)).thenReturn(Optional.of(elderProfile()));
+        stubSave();
+
+        service.resolve(500L, caller(200L, UserTypeEnum.CARETAKER));
+
+        verify(messagingTemplate).convertAndSend(eq("/topic/emergency-alerts"), any(EmergencyAlertResponse.class));
+    }
+
+    @Test
+    void dispatchOverrideBroadcastsTheUpdatedAlertToTheLiveTopic() throws GenericException {
+        when(emergencyAlertRepository.findById(500L)).thenReturn(Optional.of(existingAlert(EmergencyAlertStatusEnum.TRIGGERED, null, LocalDateTime.now())));
+        when(elderProfileRepository.findById(ELDER_PROFILE_ID)).thenReturn(Optional.of(elderProfile()));
+        stubSave();
+
+        service.dispatchOverride(500L, caller(900L, UserTypeEnum.ADMIN),
+                EmergencyAlertDispatchOverrideRequest.builder().forceResolve(true).build());
+
+        verify(messagingTemplate).convertAndSend(eq("/topic/emergency-alerts"), any(EmergencyAlertResponse.class));
+    }
+
+    @Test
+    void triggerDoesNotBroadcastToTheLiveTopic() throws GenericException {
+        when(elderProfileRepository.findById(ELDER_PROFILE_ID)).thenReturn(Optional.of(elderProfile()));
+        when(nominatimGeocodingClient.reverseGeocode(anyDouble(), anyDouble())).thenReturn(null);
+        stubSave();
+        when(proximityMatchingService.findMatchingCaretakers(anyDouble(), anyDouble())).thenReturn(List.of());
+        when(familyElderLinkRepository.findByElderProfileId(ELDER_PROFILE_ID)).thenReturn(List.of());
+
+        service.trigger(caller(FAMILY_OWNER_ID, UserTypeEnum.FAMILY_MEMBER), request());
+
+        verify(messagingTemplate, never()).convertAndSend(anyString(), any(EmergencyAlertResponse.class));
+    }
+
+    // ==== getAll / getById ====
+
+    @Test
+    void getAllDelegatesToFindByCriteriaAndMapsEachRow() throws GenericException {
+        EmergencyAlert alert = existingAlert(EmergencyAlertStatusEnum.TRIGGERED, null, LocalDateTime.now());
+        when(emergencyAlertRepository.findByCriteria(ELDER_PROFILE_ID, EmergencyAlertStatusEnum.TRIGGERED, PageRequest.of(0, 10)))
+                .thenReturn(new PageImpl<>(List.of(alert)));
+        when(elderProfileRepository.findById(ELDER_PROFILE_ID)).thenReturn(Optional.of(elderProfile()));
+        stubEscalationTimeoutMinutes(15);
+
+        List<EmergencyAlertResponse> content = service.getAll(ELDER_PROFILE_ID, EmergencyAlertStatusEnum.TRIGGERED, PageRequest.of(0, 10)).getContent();
+
+        assertThat(content).extracting(EmergencyAlertResponse::getId).containsExactly(500L);
+    }
+
+    @Test
+    void getByIdReturnsTheAlert() throws GenericException {
+        when(emergencyAlertRepository.findById(500L)).thenReturn(Optional.of(existingAlert(EmergencyAlertStatusEnum.TRIGGERED, null, LocalDateTime.now())));
+        when(elderProfileRepository.findById(ELDER_PROFILE_ID)).thenReturn(Optional.of(elderProfile()));
+        stubEscalationTimeoutMinutes(15);
+
+        assertThat(service.getById(500L).getId()).isEqualTo(500L);
+    }
+
+    @Test
+    void getByIdThrowsWhenTheAlertDoesNotExist() {
+        when(emergencyAlertRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getById(999L))
+                .isInstanceOf(GenericException.class)
+                .extracting(ex -> ((GenericException) ex).getExceptionCode())
+                .isEqualTo(ExceptionCodeEnum.EMERGENCY_ALERT_NOT_FOUND);
     }
 }

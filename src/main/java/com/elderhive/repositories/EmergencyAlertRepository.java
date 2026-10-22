@@ -5,6 +5,8 @@ import com.elderhive.enums.EmergencyAlertStatusEnum;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -14,6 +16,18 @@ public interface EmergencyAlertRepository extends JpaRepository<EmergencyAlert, 
 
     // Backs a future elder-history view and admin oversight listing.
     Page<EmergencyAlert> findByElderProfileId(Long elderProfileId, Pageable pageable);
+
+    // Backs Prompt 87's admin oversight listing (EmergencyAlertController#getAll) - no
+    // ORDER BY here, same nullable-predicate JPQL shape as BookingRepository's own
+    // findByCriteria precedent; sorting is left entirely to the caller's Pageable.
+    @Query("""
+            SELECT e FROM EmergencyAlert e
+            WHERE (:elderProfileId IS NULL OR e.elderProfileId = :elderProfileId)
+            AND (:status IS NULL OR e.status = :status)
+    """)
+    Page<EmergencyAlert> findByCriteria(@Param("elderProfileId") Long elderProfileId,
+                                         @Param("status") EmergencyAlertStatusEnum status,
+                                         Pageable pageable);
 
     // Backs the future caretaker/admin "active alerts" queue (Prompt 84's dispatch
     // override needs to list unclaimed/unresolved alerts).

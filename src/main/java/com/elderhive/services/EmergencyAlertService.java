@@ -4,7 +4,10 @@ import com.elderhive.dtos.Emergency.EmergencyAlertDispatchOverrideRequest;
 import com.elderhive.dtos.Emergency.EmergencyAlertResponse;
 import com.elderhive.dtos.Emergency.EmergencyAlertTriggerRequest;
 import com.elderhive.entities.User;
+import com.elderhive.enums.EmergencyAlertStatusEnum;
 import com.elderhive.exceptions.GenericException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 
@@ -55,4 +58,13 @@ public interface EmergencyAlertService {
      * it null).
      */
     List<EmergencyAlertResponse> findNearbyActiveAlerts(User caller) throws GenericException;
+
+    /** Prompt 87's admin oversight listing - every alert system-wide, optionally filtered
+     *  by elderProfileId/status, EMERGENCY_DISPATCH-gated at the controller. */
+    Page<EmergencyAlertResponse> getAll(Long elderProfileId, EmergencyAlertStatusEnum status, Pageable pageable);
+
+    /** Prompt 87's admin detail view - a single alert by id, EMERGENCY_DISPATCH-gated at
+     *  the controller. No non-admin caller needs this (everyone else reaches an alert
+     *  through trigger/claim/resolve/nearby's own responses instead). */
+    EmergencyAlertResponse getById(Long id) throws GenericException;
 }

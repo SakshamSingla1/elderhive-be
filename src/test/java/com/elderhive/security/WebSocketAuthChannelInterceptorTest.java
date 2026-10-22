@@ -91,4 +91,34 @@ class WebSocketAuthChannelInterceptorTest {
 
         assertThat(result).isNotNull();
     }
+
+    @Test
+    void aCaretakerMaySubscribeToTheEmergencyAlertsBroadcast() {
+        Message<?> result = interceptor.preSend(
+                frame(StompCommand.SUBSCRIBE, "/topic/emergency-alerts", 42L, "CARETAKER"), null);
+
+        assertThat(result).isNotNull();
+    }
+
+    @Test
+    void anAdminMaySubscribeToTheEmergencyAlertsBroadcast() {
+        Message<?> result = interceptor.preSend(
+                frame(StompCommand.SUBSCRIBE, "/topic/emergency-alerts", 1L, "ADMIN"), null);
+
+        assertThat(result).isNotNull();
+    }
+
+    @Test
+    void aFamilyMemberCannotSubscribeToTheEmergencyAlertsBroadcast() {
+        assertThatThrownBy(() -> interceptor.preSend(
+                frame(StompCommand.SUBSCRIBE, "/topic/emergency-alerts", 42L, "FAMILY_MEMBER"), null))
+                .isInstanceOf(MessagingException.class);
+    }
+
+    @Test
+    void anElderCannotSubscribeToTheEmergencyAlertsBroadcast() {
+        assertThatThrownBy(() -> interceptor.preSend(
+                frame(StompCommand.SUBSCRIBE, "/topic/emergency-alerts", 42L, "ELDER"), null))
+                .isInstanceOf(MessagingException.class);
+    }
 }

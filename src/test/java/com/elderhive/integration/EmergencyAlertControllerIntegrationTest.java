@@ -385,4 +385,73 @@ class EmergencyAlertControllerIntegrationTest {
         mockMvc.perform(get("/api/v1/emergency-alerts/nearby").cookie(loginCookieFor(caretakerUser)))
                 .andExpect(status().isNotFound());
     }
+
+    @Test
+    void adminGetAllListsEveryAlertAndFiltersByStatusAndElderProfileId() throws Exception {
+        when(nominatimGeocodingClient.reverseGeocode(anyDouble(), anyDouble())).thenReturn(null);
+        User familyOwner = persistUser("ea-admin-list-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
+        User admin = persistAdminWithEmergencyDispatch("ea-admin-list-admin@example.com");
+        User plainAdmin = persistUser("ea-admin-list-plain-admin@example.com", UserTypeEnum.ADMIN);
+        ElderProfile elderA = elderProfileRepository.save(ElderProfile.builder().familyUserId(familyOwner.getId()).fullName("Robert").build());
+        ElderProfile elderB = elderProfileRepository.save(ElderProfile.builder().familyUserId(familyOwner.getId()).fullName("Grandma Rose").build());
+        Long alertA = triggerAlert(familyOwner, elderA);
+        String bodyB = objectMapper.writeValueAsString(Map.of("elderProfileId", elderB.getId(), "latitude", 0.0, "longitude", 0.0));
+        mockMvc.perform(post("/api/v1/emergency-alerts").cookie(loginCookieFor(familyOwner)).contentType("application/json").content(bodyB))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/emergency-alerts").cookie(loginCookieFor(plainAdmin)))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/api/v1/emergency-alerts").cookie(loginCookieFor(admin)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content.length()").value(2));
+
+        mockMvc.perform(get("/api/v1/emergency-alerts").cookie(loginCookieFor(admin)).param("elderProfileId", elderA.getId().toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content.length()").value(1))
+                .andExpect(jsonPath("$.data.content[0].id").value(alertA));
+
+        mockMvc.perform(get("/api/v1/emergency-alerts").cookie(loginCookieFor(admin)).param("status", "RESOLVED"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content.length()").value(0));
+    }
+
+    @Test
+    void adminGetByIdReturnsTheFullAlertIncludingOverdueAndResponseTime() throws Exception {
+        // Stubbed directly, not via the triggerAlert() helper - that helper stubs its own
+        // null address internally, which would clobber this test's own stub if called
+        // afterward (Mockito stubs are last-write-wins across the whole test).
+        User familyOwner = persistUser("ea-admin-getbyid-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
+        User admin = persistAdminWithEmergencyDispatch("ea-admin-getbyid-admin@example.com");
+        ElderProfile elder = elderProfileRepository.save(ElderProfile.builder().familyUserId(familyOwner.getId()).fullName("Robert").build());
+        when(nominatimGeocodingClient.reverseGeocode(anyDouble(), anyDouble())).thenReturn("MG Road, Bengaluru");
+        String body = objectMapper.writeValueAsString(Map.of("elderProfileId", elder.getId(), "latitude", 0.0, "longitude", 0.0));
+        MvcResult result = mockMvc.perform(post("/api/v1/emergency-alerts").cookie(loginCookieFor(familyOwner))
+                        .contentType("application/json").content(body))
+                .andExpect(status().isCreated()).andReturn();
+        Long alertId = objectMapper.readTree(result.getResponse().getContentAsString()).at("/data/id").asLong();
+
+        mockMvc.perform(get("/api/v1/emergency-alerts/" + alertId).cookie(loginCookieFor(admin)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.elderName").value("Robert"))
+                .andExpect(jsonPath("$.data.address").value("MG Road, Bengaluru"))
+                .andExpect(jsonPath("$.data.status").value("TRIGGERED"))
+                .andExpect(jsonPath("$.data.isOverdue").value(false))
+                .andExpect(jsonPath("$.data.responseTimeSeconds").value(org.hamcrest.Matchers.nullValue()));
+    }
+
+    @Test
+    void adminGetByIdReturns404ForAnUnknownAlert() throws Exception {
+        User admin = persistAdminWithEmergencyDispatch("ea-admin-getbyid-404-admin@example.com");
+
+        mockMvc.perform(get("/api/v1/emergency-alerts/999999999").cookie(loginCookieFor(admin)))
+                .andExpect(status().isNotFound());
+    }
+
+    // The actual /topic/emergency-alerts broadcast on claim/resolve/dispatchOverride
+    // (Prompt 87) is covered at the unit level (EmergencyAlertServiceImplTest) - verifying
+    // it here would mean @MockitoBean-replacing the real SimpMessagingTemplate this whole
+    // class otherwise exercises for real (notifyCaretakers/notifyFamily's own pushes),
+    // which risks masking an unrelated regression in THAT real wiring for a single
+    // assertion this class doesn't otherwise need.
 }

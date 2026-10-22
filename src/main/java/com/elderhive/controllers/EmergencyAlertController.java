@@ -4,6 +4,7 @@ import com.elderhive.dtos.Emergency.EmergencyAlertDispatchOverrideRequest;
 import com.elderhive.dtos.Emergency.EmergencyAlertResponse;
 import com.elderhive.dtos.Emergency.EmergencyAlertTriggerRequest;
 import com.elderhive.entities.User;
+import com.elderhive.enums.EmergencyAlertStatusEnum;
 import com.elderhive.enums.ExceptionCodeEnum;
 import com.elderhive.exceptions.GenericException;
 import com.elderhive.payload.ApiResponse;
@@ -12,6 +13,8 @@ import com.elderhive.repositories.UserRepository;
 import com.elderhive.services.EmergencyAlertService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -22,14 +25,14 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
 /**
- * Trigger (Prompt 83), claim/resolve/dispatch-override (Prompt 84), and the caretaker
- * "nearby active alerts" queue (Prompt 86) - a general getById/search for admin oversight
- * still doesn't exist yet (Prompt 87's job).
+ * Trigger (Prompt 83), claim/resolve/dispatch-override (Prompt 84), the caretaker
+ * "nearby active alerts" queue (Prompt 86), and admin oversight getAll/getById (Prompt 87).
  */
 @RestController
 @RequestMapping("/api/v1/emergency-alerts")
@@ -79,6 +82,21 @@ public class EmergencyAlertController {
     @GetMapping("/nearby")
     public ResponseEntity<ResponseModel<List<EmergencyAlertResponse>>> nearby() throws GenericException {
         return ApiResponse.successResponse(emergencyAlertService.findNearbyActiveAlerts(currentUser()), "Nearby active alerts fetched");
+    }
+
+    @PreAuthorize("hasRole('ADMIN') and @adminPermissionGuard.has('EMERGENCY_DISPATCH')")
+    @GetMapping
+    public ResponseEntity<ResponseModel<Page<EmergencyAlertResponse>>> getAll(
+            @RequestParam(required = false) Long elderProfileId,
+            @RequestParam(required = false) EmergencyAlertStatusEnum status,
+            Pageable pageable) {
+        return ApiResponse.successResponse(emergencyAlertService.getAll(elderProfileId, status, pageable), "Emergency alerts fetched");
+    }
+
+    @PreAuthorize("hasRole('ADMIN') and @adminPermissionGuard.has('EMERGENCY_DISPATCH')")
+    @GetMapping("/{id}")
+    public ResponseEntity<ResponseModel<EmergencyAlertResponse>> getById(@PathVariable Long id) throws GenericException {
+        return ApiResponse.successResponse(emergencyAlertService.getById(id), "Emergency alert fetched");
     }
 
     private User currentUser() throws GenericException {

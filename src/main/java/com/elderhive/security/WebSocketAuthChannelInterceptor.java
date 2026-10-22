@@ -17,10 +17,9 @@ import java.util.regex.Pattern;
 /**
  * Narrower than ElderSphere's WebSocketAuthChannelInterceptor on purpose: ElderSphere also
  * guards /topic/conversations/{id} and its /typing variant (participant-only), but ElderHive
- * has no Conversation entity yet — this prompt's own scope is explicitly just
- * /topic/notifications/{userId}, so only that pattern is checked here. A later phase that
- * adds conversations/chat should extend this interceptor with that pattern then, the same
- * way ElderSphere's own file grew one topic at a time.
+ * has no Conversation entity yet — this interceptor's scope was originally just
+ * /topic/notifications/{userId}; Prompt 87 adds one more pattern for the same reason
+ * ElderSphere's own file grew one topic at a time.
  *
  * <p>CONNECT is double-checked here too, though WebSocketJwtHandshakeInterceptor already
  * rejects unauthenticated sockets before they get this far. ADMIN/SUPER_ADMIN may subscribe
@@ -32,6 +31,12 @@ import java.util.regex.Pattern;
 public class WebSocketAuthChannelInterceptor implements ChannelInterceptor {
 
     private static final Pattern NOTIFICATION_TOPIC = Pattern.compile("^/topic/notifications/(\\d+)$");
+    // The live claim/resolve/dispatch-override broadcast (EmergencyAlertServiceImpl,
+    // Prompt 87) - no per-user id in the destination (everyone watching gets the same
+    // message), so this is gated by ROLE instead of ownership: a FAMILY_MEMBER/ELDER
+    // session has no legitimate reason to see system-wide alert status changes for
+    // elders they have no connection to.
+    private static final String EMERGENCY_ALERTS_TOPIC = "/topic/emergency-alerts";
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -66,6 +71,14 @@ public class WebSocketAuthChannelInterceptor implements ChannelInterceptor {
                 if (!isAdmin && !userId.equals(topicUserId)) {
                     log.warn("Rejected WS subscribe to {} by user {}", destination, userId);
                     throw new MessagingException("Cannot subscribe to another user's notifications");
+                }
+            }
+
+            if (EMERGENCY_ALERTS_TOPIC.equals(destination)) {
+                boolean isCaretaker = "CARETAKER".equals(userType);
+                if (!isAdmin && !isCaretaker) {
+                    log.warn("Rejected WS subscribe to {} by user {}", destination, userId);
+                    throw new MessagingException("Cannot subscribe to the emergency alerts broadcast");
                 }
             }
         }

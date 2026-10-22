@@ -32,6 +32,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -75,6 +78,15 @@ public class EmergencyAlertServiceImpl implements EmergencyAlertService {
     private final AdminPermissionGuard adminPermissionGuard;
     private final NominatimGeocodingClient nominatimGeocodingClient;
     private final ObjectMapper objectMapper;
+    private final SimpMessagingTemplate messagingTemplate;
+
+    // Broadcast-to-everyone-watching topic (Prompt 87) - deliberately NOT a per-user
+    // Notification (no inbox row, no NotificationTemplate, no delivery log): claim/
+    // resolve/dispatchOverride don't need to tell any ONE specific person something new
+    // happened to THEM, they need every caretaker/admin screen that's already showing
+    // this alert to resync. trigger() doesn't publish here - its own real fan-out
+    // (notifyCaretakers/notifyFamily) already covers "something new is happening".
+    private static final String EMERGENCY_ALERTS_TOPIC = "/topic/emergency-alerts";
 
     @Override
     @Transactional
@@ -131,7 +143,9 @@ public class EmergencyAlertServiceImpl implements EmergencyAlertService {
         alert.setStatus(EmergencyAlertStatusEnum.ACKNOWLEDGED);
         EmergencyAlert saved = emergencyAlertRepository.save(alert);
 
-        return toResponse(saved, elderProfileRepository.findById(saved.getElderProfileId()).orElse(null));
+        EmergencyAlertResponse response = toResponse(saved, elderProfileRepository.findById(saved.getElderProfileId()).orElse(null));
+        broadcastStatusChanged(response);
+        return response;
     }
 
     @Override
@@ -147,7 +161,9 @@ public class EmergencyAlertServiceImpl implements EmergencyAlertService {
         markResolved(alert);
         EmergencyAlert saved = emergencyAlertRepository.save(alert);
 
-        return toResponse(saved, elderProfileRepository.findById(saved.getElderProfileId()).orElse(null));
+        EmergencyAlertResponse response = toResponse(saved, elderProfileRepository.findById(saved.getElderProfileId()).orElse(null));
+        broadcastStatusChanged(response);
+        return response;
     }
 
     @Override
@@ -175,7 +191,39 @@ public class EmergencyAlertServiceImpl implements EmergencyAlertService {
         }
         EmergencyAlert saved = emergencyAlertRepository.save(alert);
 
-        return toResponse(saved, elderProfileRepository.findById(saved.getElderProfileId()).orElse(null));
+        EmergencyAlertResponse response = toResponse(saved, elderProfileRepository.findById(saved.getElderProfileId()).orElse(null));
+        broadcastStatusChanged(response);
+        return response;
+    }
+
+    @Override
+    public Page<EmergencyAlertResponse> getAll(Long elderProfileId, EmergencyAlertStatusEnum status, Pageable pageable) {
+        return emergencyAlertRepository.findByCriteria(elderProfileId, status, pageable)
+                .map(this::toResponseUnchecked);
+    }
+
+    @Override
+    public EmergencyAlertResponse getById(Long id) throws GenericException {
+        EmergencyAlert alert = findOrThrow(id);
+        return toResponse(alert, elderProfileRepository.findById(alert.getElderProfileId()).orElse(null));
+    }
+
+    // Page#map's Function<T, R> signature has no checked-exception escape hatch, unlike
+    // every other caller here - toResponse only ever actually throws when
+    // resolveEscalationTimeoutMinutes's EMERGENCY_SETTINGS read fails to parse, which would
+    // be a system misconfiguration, not a per-row problem, so this surfaces it as the
+    // generic 500 UNEXPECTED_ERROR rather than silently dropping rows or wrapping every
+    // row's own GenericException in something misleading.
+    private EmergencyAlertResponse toResponseUnchecked(EmergencyAlert alert) {
+        try {
+            return toResponse(alert, elderProfileRepository.findById(alert.getElderProfileId()).orElse(null));
+        } catch (GenericException e) {
+            throw new RuntimeException(e.getErrorMessage(), e);
+        }
+    }
+
+    private void broadcastStatusChanged(EmergencyAlertResponse response) {
+        messagingTemplate.convertAndSend(EMERGENCY_ALERTS_TOPIC, response);
     }
 
     @Override
