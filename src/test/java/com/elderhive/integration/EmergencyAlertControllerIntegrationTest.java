@@ -5,6 +5,7 @@ import com.elderhive.entities.CaretakerProfile;
 import com.elderhive.entities.ElderProfile;
 import com.elderhive.entities.FamilyElderLink;
 import com.elderhive.entities.Notification;
+import com.elderhive.entities.Role;
 import com.elderhive.entities.User;
 import com.elderhive.enums.ActionType;
 import com.elderhive.enums.CaretakerVerificationStatusEnum;
@@ -17,6 +18,7 @@ import com.elderhive.repositories.CaretakerProfileRepository;
 import com.elderhive.repositories.ElderProfileRepository;
 import com.elderhive.repositories.FamilyElderLinkRepository;
 import com.elderhive.repositories.NotificationRepository;
+import com.elderhive.repositories.RoleRepository;
 import com.elderhive.repositories.UserRepository;
 import com.elderhive.security.JwtUtil;
 import com.elderhive.services.impl.NominatimGeocodingClient;
@@ -39,6 +41,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -84,6 +87,9 @@ class EmergencyAlertControllerIntegrationTest {
     private AuditLogRepository auditLogRepository;
 
     @Autowired
+    private RoleRepository roleRepository;
+
+    @Autowired
     private ObjectMapper objectMapper;
 
     @MockitoBean
@@ -109,6 +115,28 @@ class EmergencyAlertControllerIntegrationTest {
     private boolean hasNotification(Long userId, NotificationTypeEnum type) {
         return notificationRepository.findByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(0, 10)).getContent().stream()
                 .anyMatch(n -> n.getType() == type);
+    }
+
+    // AdminBootstrapSeeder (Prompt 24) seeds a curated "Admin" role with EMERGENCY_DISPATCH
+    // on every boot - the same precedent BookingControllerIntegrationTest's own
+    // adminOverrideStatus tests use, rather than hand-rolling Role/Permission/RolePermission
+    // rows here.
+    private User persistAdminWithEmergencyDispatch(String email) {
+        Role adminRole = roleRepository.findByName("Admin").orElseThrow();
+        return userRepository.save(User.builder()
+                .email(email).passwordHash("hashed").userType(UserTypeEnum.ADMIN).roleId(adminRole.getId()).status(UserStatusEnum.ACTIVE).build());
+    }
+
+    private Long triggerAlert(User owner, ElderProfile elder) throws Exception {
+        when(nominatimGeocodingClient.reverseGeocode(anyDouble(), anyDouble())).thenReturn(null);
+        String body = objectMapper.writeValueAsString(Map.of(
+                "elderProfileId", elder.getId(), "latitude", 0.0, "longitude", 0.0));
+        MvcResult result = mockMvc.perform(post("/api/v1/emergency-alerts")
+                        .cookie(loginCookieFor(owner))
+                        .contentType("application/json").content(body))
+                .andExpect(status().isCreated())
+                .andReturn();
+        return objectMapper.readTree(result.getResponse().getContentAsString()).at("/data/id").asLong();
     }
 
     @Test
@@ -196,5 +224,99 @@ class EmergencyAlertControllerIntegrationTest {
                 .andExpect(status().isCreated());
 
         assertThat(hasNotification(familyOwner.getId(), NotificationTypeEnum.EMERGENCY)).isTrue();
+    }
+
+    @Test
+    void firstClaimWinsAndASecondClaimAttemptIsRejected() throws Exception {
+        User familyOwner = persistUser("ea-claim-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
+        User firstCaretakerUser = persistUser("ea-claim-first@example.com", UserTypeEnum.CARETAKER);
+        User secondCaretakerUser = persistUser("ea-claim-second@example.com", UserTypeEnum.CARETAKER);
+        persistCaretaker(firstCaretakerUser.getId(), 0.0, 0.0, 10.0, CaretakerVerificationStatusEnum.VERIFIED);
+        persistCaretaker(secondCaretakerUser.getId(), 0.0, 0.0, 10.0, CaretakerVerificationStatusEnum.VERIFIED);
+        ElderProfile elder = elderProfileRepository.save(ElderProfile.builder().familyUserId(familyOwner.getId()).fullName("Robert").build());
+        Long alertId = triggerAlert(familyOwner, elder);
+
+        mockMvc.perform(put("/api/v1/emergency-alerts/" + alertId + "/claim").cookie(loginCookieFor(firstCaretakerUser)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("ACKNOWLEDGED"));
+
+        mockMvc.perform(put("/api/v1/emergency-alerts/" + alertId + "/claim").cookie(loginCookieFor(secondCaretakerUser)))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void theClaimingCaretakerCanResolveButAnotherCaretakerCannot() throws Exception {
+        User familyOwner = persistUser("ea-resolve-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
+        User claimingCaretakerUser = persistUser("ea-resolve-claiming@example.com", UserTypeEnum.CARETAKER);
+        User otherCaretakerUser = persistUser("ea-resolve-other@example.com", UserTypeEnum.CARETAKER);
+        persistCaretaker(claimingCaretakerUser.getId(), 0.0, 0.0, 10.0, CaretakerVerificationStatusEnum.VERIFIED);
+        persistCaretaker(otherCaretakerUser.getId(), 0.0, 0.0, 10.0, CaretakerVerificationStatusEnum.VERIFIED);
+        ElderProfile elder = elderProfileRepository.save(ElderProfile.builder().familyUserId(familyOwner.getId()).fullName("Robert").build());
+        Long alertId = triggerAlert(familyOwner, elder);
+        mockMvc.perform(put("/api/v1/emergency-alerts/" + alertId + "/claim").cookie(loginCookieFor(claimingCaretakerUser)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(put("/api/v1/emergency-alerts/" + alertId + "/resolve").cookie(loginCookieFor(otherCaretakerUser)))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(put("/api/v1/emergency-alerts/" + alertId + "/resolve").cookie(loginCookieFor(claimingCaretakerUser)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("RESOLVED"))
+                .andExpect(jsonPath("$.data.responseTimeSeconds").isNumber());
+    }
+
+    @Test
+    void anAdminWithEmergencyDispatchCanForceResolveAnUnclaimedAlertButAPlainAdminCannotEvenReachTheEndpoint() throws Exception {
+        User familyOwner = persistUser("ea-override-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
+        User admin = persistAdminWithEmergencyDispatch("ea-override-admin@example.com");
+        User plainAdmin = persistUser("ea-override-plain-admin@example.com", UserTypeEnum.ADMIN); // no roleId -> no permissions at all
+        ElderProfile elder = elderProfileRepository.save(ElderProfile.builder().familyUserId(familyOwner.getId()).fullName("Robert").build());
+        Long alertId = triggerAlert(familyOwner, elder);
+
+        String forceResolveBody = objectMapper.writeValueAsString(Map.of("forceResolve", true));
+
+        mockMvc.perform(put("/api/v1/emergency-alerts/" + alertId + "/dispatch-override")
+                        .cookie(loginCookieFor(plainAdmin)).contentType("application/json").content(forceResolveBody))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(put("/api/v1/emergency-alerts/" + alertId + "/dispatch-override")
+                        .cookie(loginCookieFor(admin)).contentType("application/json").content(forceResolveBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("RESOLVED"));
+    }
+
+    @Test
+    void dispatchOverrideCanReassignAnUnclaimedAlertToAChosenCaretaker() throws Exception {
+        User familyOwner = persistUser("ea-reassign-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
+        User admin = persistAdminWithEmergencyDispatch("ea-reassign-admin@example.com");
+        User caretakerUser = persistUser("ea-reassign-caretaker@example.com", UserTypeEnum.CARETAKER);
+        CaretakerProfile caretakerProfile = persistCaretaker(caretakerUser.getId(), 0.0, 0.0, 10.0, CaretakerVerificationStatusEnum.VERIFIED);
+        ElderProfile elder = elderProfileRepository.save(ElderProfile.builder().familyUserId(familyOwner.getId()).fullName("Robert").build());
+        Long alertId = triggerAlert(familyOwner, elder);
+
+        String reassignBody = objectMapper.writeValueAsString(Map.of("respondingCaretakerId", caretakerProfile.getId()));
+
+        mockMvc.perform(put("/api/v1/emergency-alerts/" + alertId + "/dispatch-override")
+                        .cookie(loginCookieFor(admin)).contentType("application/json").content(reassignBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("ACKNOWLEDGED"))
+                .andExpect(jsonPath("$.data.respondingCaretakerId").value(caretakerProfile.getId()));
+    }
+
+    @Test
+    void aFreshlyTriggeredAlertIsNotOverdueAndTheJsonKeyIsLiterallyIsOverdue() throws Exception {
+        User familyOwner = persistUser("ea-overdue-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
+        ElderProfile elder = elderProfileRepository.save(ElderProfile.builder().familyUserId(familyOwner.getId()).fullName("Robert").build());
+        when(nominatimGeocodingClient.reverseGeocode(anyDouble(), anyDouble())).thenReturn(null);
+        String body = objectMapper.writeValueAsString(Map.of("elderProfileId", elder.getId(), "latitude", 0.0, "longitude", 0.0));
+
+        // Asserts the literal JSON key "isOverdue" - the Lombok/Jackson double-"is"-
+        // stripping gotcha this DTO's own @JsonProperty pin exists to prevent (see
+        // EmergencyAlertResponse's own comment) only ever surfaces at real serialization
+        // time, which a Mockito-based unit test never exercises.
+        mockMvc.perform(post("/api/v1/emergency-alerts").cookie(loginCookieFor(familyOwner))
+                        .contentType("application/json").content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.isOverdue").value(false));
     }
 }

@@ -99,6 +99,7 @@ public enum ExceptionCodeEnum {
     BOOKING_SLOT_UNAVAILABLE("BOOKING_SLOT_UNAVAILABLE"),
 
     // ==== EMERGENCY ALERT ====
+    EMERGENCY_ALERT_NOT_FOUND("EMERGENCY_ALERT_NOT_FOUND"),
     // A caretaker tried to claim an alert another caretaker already claimed first
     // (Prompt 84's "first claim wins" rule) - a concurrency conflict, not a missing-
     // resource or bad-input problem.

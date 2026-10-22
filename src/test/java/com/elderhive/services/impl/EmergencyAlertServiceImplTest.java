@@ -1,21 +1,29 @@
 package com.elderhive.services.impl;
 
 import com.elderhive.dtos.Emergency.CaretakerProximityMatch;
+import com.elderhive.dtos.Emergency.EmergencyAlertDispatchOverrideRequest;
 import com.elderhive.dtos.Emergency.EmergencyAlertResponse;
 import com.elderhive.dtos.Emergency.EmergencyAlertTriggerRequest;
+import com.elderhive.dtos.MetaConfig.MetaConfigResponse;
 import com.elderhive.entities.CaretakerProfile;
 import com.elderhive.entities.ElderProfile;
 import com.elderhive.entities.EmergencyAlert;
 import com.elderhive.entities.FamilyElderLink;
 import com.elderhive.entities.User;
 import com.elderhive.enums.ActionType;
+import com.elderhive.enums.EmergencyAlertStatusEnum;
 import com.elderhive.enums.EntityTypeEnum;
 import com.elderhive.enums.ExceptionCodeEnum;
 import com.elderhive.enums.UserTypeEnum;
 import com.elderhive.exceptions.GenericException;
+import com.elderhive.repositories.CaretakerProfileRepository;
 import com.elderhive.repositories.ElderProfileRepository;
 import com.elderhive.repositories.EmergencyAlertRepository;
 import com.elderhive.repositories.FamilyElderLinkRepository;
+import com.elderhive.repositories.UserRepository;
+import com.elderhive.seed.MetaConfigSeeder;
+import com.elderhive.security.AdminPermissionGuard;
+import com.elderhive.services.AdminConfigService;
 import com.elderhive.services.AuditLogService;
 import com.elderhive.services.NotificationService;
 import com.elderhive.services.ProximityMatchingService;
@@ -28,6 +36,7 @@ import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -53,11 +62,19 @@ class EmergencyAlertServiceImplTest {
     @Mock
     private FamilyElderLinkRepository familyElderLinkRepository;
     @Mock
+    private CaretakerProfileRepository caretakerProfileRepository;
+    @Mock
+    private UserRepository userRepository;
+    @Mock
     private ProximityMatchingService proximityMatchingService;
     @Mock
     private NotificationService notificationService;
     @Mock
     private AuditLogService auditLogService;
+    @Mock
+    private AdminConfigService adminConfigService;
+    @Mock
+    private AdminPermissionGuard adminPermissionGuard;
     @Mock
     private NominatimGeocodingClient nominatimGeocodingClient;
     @Spy
@@ -92,6 +109,22 @@ class EmergencyAlertServiceImplTest {
             alert.setId(500L);
             return alert;
         });
+    }
+
+    private EmergencyAlert existingAlert(EmergencyAlertStatusEnum status, Long respondingCaretakerId, LocalDateTime createdAt) {
+        // createdAt lives on Auditable (a plain @Data mapped superclass, not @SuperBuilder) -
+        // EmergencyAlert's own @Builder doesn't expose inherited fields, so it's set via the
+        // ordinary setter afterward.
+        EmergencyAlert alert = EmergencyAlert.builder().id(500L).elderProfileId(ELDER_PROFILE_ID).triggeredByUserId(FAMILY_OWNER_ID)
+                .latitude(12.9716).longitude(77.5946).status(status).respondingCaretakerId(respondingCaretakerId).build();
+        alert.setCreatedAt(createdAt);
+        return alert;
+    }
+
+    private void stubEscalationTimeoutMinutes(int minutes) throws GenericException {
+        when(adminConfigService.getConfig(MetaConfigSeeder.EMERGENCY_SETTINGS_CONTEXT))
+                .thenReturn(MetaConfigResponse.builder().context("EMERGENCY_SETTINGS")
+                        .data("{\"searchRadiusKm\": 10, \"escalationTimeoutMinutes\": " + minutes + "}").build());
     }
 
     @Test
@@ -202,5 +235,236 @@ class EmergencyAlertServiceImplTest {
         verify(auditLogService).record(eq(EntityTypeEnum.EMERGENCY_ALERT), eq("500"), eq(ActionType.CREATE), eq(FAMILY_OWNER_ID), anyString());
         verify(auditLogService, times(2)).record(eq(EntityTypeEnum.EMERGENCY_ALERT), eq("500"), eq(ActionType.NOTIFY), eq(FAMILY_OWNER_ID), anyString());
         verify(auditLogService, times(3)).record(eq(EntityTypeEnum.EMERGENCY_ALERT), eq("500"), any(), eq(FAMILY_OWNER_ID), anyString());
+    }
+
+    // ==== claim ====
+
+    @Test
+    void claimMovesTriggeredToAcknowledgedAndSetsTheRespondingCaretaker() throws GenericException {
+        when(emergencyAlertRepository.findById(500L)).thenReturn(Optional.of(existingAlert(EmergencyAlertStatusEnum.TRIGGERED, null, LocalDateTime.now())));
+        when(caretakerProfileRepository.findByUserId(200L)).thenReturn(Optional.of(CaretakerProfile.builder().id(30L).userId(200L).build()));
+        when(elderProfileRepository.findById(ELDER_PROFILE_ID)).thenReturn(Optional.of(elderProfile()));
+        stubEscalationTimeoutMinutes(15);
+        stubSave();
+
+        EmergencyAlertResponse response = service.claim(500L, caller(200L, UserTypeEnum.CARETAKER));
+
+        assertThat(response.getStatus()).isEqualTo(EmergencyAlertStatusEnum.ACKNOWLEDGED);
+        assertThat(response.getRespondingCaretakerId()).isEqualTo(30L);
+    }
+
+    @Test
+    void claimRejectsAnAlertThatHasAlreadyMovedPastTriggered() {
+        when(emergencyAlertRepository.findById(500L)).thenReturn(Optional.of(existingAlert(EmergencyAlertStatusEnum.ACKNOWLEDGED, 30L, LocalDateTime.now())));
+
+        assertThatThrownBy(() -> service.claim(500L, caller(200L, UserTypeEnum.CARETAKER)))
+                .isInstanceOf(GenericException.class)
+                .extracting(ex -> ((GenericException) ex).getExceptionCode())
+                .isEqualTo(ExceptionCodeEnum.EMERGENCY_ALERT_ALREADY_CLAIMED);
+    }
+
+    @Test
+    void claimThrowsWhenTheCallerHasNoCaretakerProfile() {
+        when(emergencyAlertRepository.findById(500L)).thenReturn(Optional.of(existingAlert(EmergencyAlertStatusEnum.TRIGGERED, null, LocalDateTime.now())));
+        when(caretakerProfileRepository.findByUserId(200L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.claim(500L, caller(200L, UserTypeEnum.CARETAKER)))
+                .isInstanceOf(GenericException.class)
+                .extracting(ex -> ((GenericException) ex).getExceptionCode())
+                .isEqualTo(ExceptionCodeEnum.CARETAKER_PROFILE_NOT_FOUND);
+    }
+
+    @Test
+    void claimThrowsWhenTheAlertDoesNotExist() {
+        when(emergencyAlertRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.claim(999L, caller(200L, UserTypeEnum.CARETAKER)))
+                .isInstanceOf(GenericException.class)
+                .extracting(ex -> ((GenericException) ex).getExceptionCode())
+                .isEqualTo(ExceptionCodeEnum.EMERGENCY_ALERT_NOT_FOUND);
+    }
+
+    // ==== resolve ====
+
+    @Test
+    void resolveComputesResponseTimeSecondsAndMovesToResolvedForTheClaimingCaretaker() throws GenericException {
+        LocalDateTime createdAt = LocalDateTime.now().minusSeconds(90);
+        when(emergencyAlertRepository.findById(500L)).thenReturn(Optional.of(existingAlert(EmergencyAlertStatusEnum.ACKNOWLEDGED, 30L, createdAt)));
+        when(caretakerProfileRepository.findByUserId(200L)).thenReturn(Optional.of(CaretakerProfile.builder().id(30L).userId(200L).build()));
+        when(elderProfileRepository.findById(ELDER_PROFILE_ID)).thenReturn(Optional.of(elderProfile()));
+        stubSave();
+
+        EmergencyAlertResponse response = service.resolve(500L, caller(200L, UserTypeEnum.CARETAKER));
+
+        assertThat(response.getStatus()).isEqualTo(EmergencyAlertStatusEnum.RESOLVED);
+        assertThat(response.getResponseTimeSeconds()).isGreaterThanOrEqualTo(90);
+        assertThat(response.isOverdue()).isFalse();
+    }
+
+    @Test
+    void resolveAllowsAnAdminWithEmergencyDispatch() throws GenericException {
+        when(emergencyAlertRepository.findById(500L)).thenReturn(Optional.of(existingAlert(EmergencyAlertStatusEnum.ACKNOWLEDGED, 30L, LocalDateTime.now())));
+        when(adminPermissionGuard.has("EMERGENCY_DISPATCH")).thenReturn(true);
+        when(elderProfileRepository.findById(ELDER_PROFILE_ID)).thenReturn(Optional.of(elderProfile()));
+        stubSave();
+
+        EmergencyAlertResponse response = service.resolve(500L, caller(900L, UserTypeEnum.ADMIN));
+
+        assertThat(response.getStatus()).isEqualTo(EmergencyAlertStatusEnum.RESOLVED);
+    }
+
+    @Test
+    void resolveRejectsACaretakerWhoDidNotClaimIt() {
+        when(emergencyAlertRepository.findById(500L)).thenReturn(Optional.of(existingAlert(EmergencyAlertStatusEnum.ACKNOWLEDGED, 30L, LocalDateTime.now())));
+        when(caretakerProfileRepository.findByUserId(999L)).thenReturn(Optional.of(CaretakerProfile.builder().id(31L).userId(999L).build()));
+
+        assertThatThrownBy(() -> service.resolve(500L, caller(999L, UserTypeEnum.CARETAKER)))
+                .isInstanceOf(GenericException.class)
+                .extracting(ex -> ((GenericException) ex).getExceptionCode())
+                .isEqualTo(ExceptionCodeEnum.FORBIDDEN);
+    }
+
+    @Test
+    void resolveRejectsAnAdminWithoutEmergencyDispatch() {
+        when(emergencyAlertRepository.findById(500L)).thenReturn(Optional.of(existingAlert(EmergencyAlertStatusEnum.ACKNOWLEDGED, 30L, LocalDateTime.now())));
+        when(adminPermissionGuard.has("EMERGENCY_DISPATCH")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.resolve(500L, caller(900L, UserTypeEnum.ADMIN)))
+                .isInstanceOf(GenericException.class)
+                .extracting(ex -> ((GenericException) ex).getExceptionCode())
+                .isEqualTo(ExceptionCodeEnum.FORBIDDEN);
+    }
+
+    @Test
+    void resolveRejectsAnAlertNobodyHasClaimedYet() {
+        when(emergencyAlertRepository.findById(500L)).thenReturn(Optional.of(existingAlert(EmergencyAlertStatusEnum.TRIGGERED, null, LocalDateTime.now())));
+        when(adminPermissionGuard.has("EMERGENCY_DISPATCH")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.resolve(500L, caller(900L, UserTypeEnum.ADMIN)))
+                .isInstanceOf(GenericException.class)
+                .extracting(ex -> ((GenericException) ex).getExceptionCode())
+                .isEqualTo(ExceptionCodeEnum.INVALID_EMERGENCY_ALERT_STATUS_TRANSITION);
+    }
+
+    // ==== dispatchOverride ====
+
+    @Test
+    void dispatchOverrideReassignsAndBumpsTriggeredToAcknowledged() throws GenericException {
+        when(emergencyAlertRepository.findById(500L)).thenReturn(Optional.of(existingAlert(EmergencyAlertStatusEnum.TRIGGERED, null, LocalDateTime.now())));
+        when(caretakerProfileRepository.findById(31L)).thenReturn(Optional.of(CaretakerProfile.builder().id(31L).userId(201L).build()));
+        when(elderProfileRepository.findById(ELDER_PROFILE_ID)).thenReturn(Optional.of(elderProfile()));
+        stubEscalationTimeoutMinutes(15);
+        stubSave();
+
+        EmergencyAlertResponse response = service.dispatchOverride(500L, caller(900L, UserTypeEnum.ADMIN),
+                EmergencyAlertDispatchOverrideRequest.builder().respondingCaretakerId(31L).build());
+
+        assertThat(response.getStatus()).isEqualTo(EmergencyAlertStatusEnum.ACKNOWLEDGED);
+        assertThat(response.getRespondingCaretakerId()).isEqualTo(31L);
+    }
+
+    @Test
+    void dispatchOverrideReassigningAnAlreadyAcknowledgedAlertDoesNotChangeItsStatus() throws GenericException {
+        when(emergencyAlertRepository.findById(500L)).thenReturn(Optional.of(existingAlert(EmergencyAlertStatusEnum.ACKNOWLEDGED, 30L, LocalDateTime.now())));
+        when(caretakerProfileRepository.findById(31L)).thenReturn(Optional.of(CaretakerProfile.builder().id(31L).userId(201L).build()));
+        when(elderProfileRepository.findById(ELDER_PROFILE_ID)).thenReturn(Optional.of(elderProfile()));
+        stubEscalationTimeoutMinutes(15);
+        stubSave();
+
+        EmergencyAlertResponse response = service.dispatchOverride(500L, caller(900L, UserTypeEnum.ADMIN),
+                EmergencyAlertDispatchOverrideRequest.builder().respondingCaretakerId(31L).build());
+
+        assertThat(response.getStatus()).isEqualTo(EmergencyAlertStatusEnum.ACKNOWLEDGED);
+        assertThat(response.getRespondingCaretakerId()).isEqualTo(31L);
+    }
+
+    @Test
+    void dispatchOverrideForceResolvesRegardlessOfWhetherAnyoneClaimedIt() throws GenericException {
+        when(emergencyAlertRepository.findById(500L)).thenReturn(Optional.of(existingAlert(EmergencyAlertStatusEnum.TRIGGERED, null, LocalDateTime.now().minusMinutes(5))));
+        when(elderProfileRepository.findById(ELDER_PROFILE_ID)).thenReturn(Optional.of(elderProfile()));
+        stubSave();
+
+        EmergencyAlertResponse response = service.dispatchOverride(500L, caller(900L, UserTypeEnum.ADMIN),
+                EmergencyAlertDispatchOverrideRequest.builder().forceResolve(true).build());
+
+        assertThat(response.getStatus()).isEqualTo(EmergencyAlertStatusEnum.RESOLVED);
+        assertThat(response.getResponseTimeSeconds()).isGreaterThanOrEqualTo(300);
+    }
+
+    @Test
+    void dispatchOverrideRejectsNeitherFieldSet() {
+        when(emergencyAlertRepository.findById(500L)).thenReturn(Optional.of(existingAlert(EmergencyAlertStatusEnum.TRIGGERED, null, LocalDateTime.now())));
+
+        assertThatThrownBy(() -> service.dispatchOverride(500L, caller(900L, UserTypeEnum.ADMIN),
+                EmergencyAlertDispatchOverrideRequest.builder().build()))
+                .isInstanceOf(GenericException.class)
+                .extracting(ex -> ((GenericException) ex).getExceptionCode())
+                .isEqualTo(ExceptionCodeEnum.VALIDATION_FAILED);
+    }
+
+    @Test
+    void dispatchOverrideRejectsBothFieldsSet() {
+        when(emergencyAlertRepository.findById(500L)).thenReturn(Optional.of(existingAlert(EmergencyAlertStatusEnum.TRIGGERED, null, LocalDateTime.now())));
+
+        assertThatThrownBy(() -> service.dispatchOverride(500L, caller(900L, UserTypeEnum.ADMIN),
+                EmergencyAlertDispatchOverrideRequest.builder().respondingCaretakerId(31L).forceResolve(true).build()))
+                .isInstanceOf(GenericException.class)
+                .extracting(ex -> ((GenericException) ex).getExceptionCode())
+                .isEqualTo(ExceptionCodeEnum.VALIDATION_FAILED);
+    }
+
+    @Test
+    void dispatchOverrideRejectsAnAlreadyResolvedAlert() {
+        when(emergencyAlertRepository.findById(500L)).thenReturn(Optional.of(existingAlert(EmergencyAlertStatusEnum.RESOLVED, 30L, LocalDateTime.now())));
+
+        assertThatThrownBy(() -> service.dispatchOverride(500L, caller(900L, UserTypeEnum.ADMIN),
+                EmergencyAlertDispatchOverrideRequest.builder().forceResolve(true).build()))
+                .isInstanceOf(GenericException.class)
+                .extracting(ex -> ((GenericException) ex).getExceptionCode())
+                .isEqualTo(ExceptionCodeEnum.INVALID_EMERGENCY_ALERT_STATUS_TRANSITION);
+    }
+
+    // ==== isOverdue ====
+
+    @Test
+    void isOverdueIsTrueWhenPastTheEscalationTimeoutAndNotResolved() throws GenericException {
+        when(emergencyAlertRepository.findById(500L)).thenReturn(Optional.of(
+                existingAlert(EmergencyAlertStatusEnum.TRIGGERED, null, LocalDateTime.now().minusMinutes(20))));
+        when(caretakerProfileRepository.findByUserId(200L)).thenReturn(Optional.of(CaretakerProfile.builder().id(30L).userId(200L).build()));
+        when(elderProfileRepository.findById(ELDER_PROFILE_ID)).thenReturn(Optional.of(elderProfile()));
+        stubEscalationTimeoutMinutes(15);
+        stubSave();
+
+        EmergencyAlertResponse response = service.claim(500L, caller(200L, UserTypeEnum.CARETAKER));
+
+        assertThat(response.isOverdue()).isTrue();
+    }
+
+    @Test
+    void isOverdueIsFalseWhenWithinTheEscalationTimeout() throws GenericException {
+        when(emergencyAlertRepository.findById(500L)).thenReturn(Optional.of(
+                existingAlert(EmergencyAlertStatusEnum.TRIGGERED, null, LocalDateTime.now().minusMinutes(5))));
+        when(caretakerProfileRepository.findByUserId(200L)).thenReturn(Optional.of(CaretakerProfile.builder().id(30L).userId(200L).build()));
+        when(elderProfileRepository.findById(ELDER_PROFILE_ID)).thenReturn(Optional.of(elderProfile()));
+        stubEscalationTimeoutMinutes(15);
+        stubSave();
+
+        EmergencyAlertResponse response = service.claim(500L, caller(200L, UserTypeEnum.CARETAKER));
+
+        assertThat(response.isOverdue()).isFalse();
+    }
+
+    @Test
+    void isOverdueIsFalseWhenResolvedRegardlessOfElapsedTime() throws GenericException {
+        when(emergencyAlertRepository.findById(500L)).thenReturn(Optional.of(
+                existingAlert(EmergencyAlertStatusEnum.ACKNOWLEDGED, 30L, LocalDateTime.now().minusHours(5))));
+        when(caretakerProfileRepository.findByUserId(200L)).thenReturn(Optional.of(CaretakerProfile.builder().id(30L).userId(200L).build()));
+        when(elderProfileRepository.findById(ELDER_PROFILE_ID)).thenReturn(Optional.of(elderProfile()));
+        stubSave();
+
+        EmergencyAlertResponse response = service.resolve(500L, caller(200L, UserTypeEnum.CARETAKER));
+
+        assertThat(response.getStatus()).isEqualTo(EmergencyAlertStatusEnum.RESOLVED);
+        assertThat(response.isOverdue()).isFalse();
     }
 }

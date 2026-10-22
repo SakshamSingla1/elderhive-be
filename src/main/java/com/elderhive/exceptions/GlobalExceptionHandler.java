@@ -75,7 +75,8 @@ public class GlobalExceptionHandler {
             ExceptionCodeEnum.CARETAKER_VERIFICATION_DOCUMENT_NOT_FOUND,
             ExceptionCodeEnum.SERVICE_CATEGORY_NOT_FOUND,
             ExceptionCodeEnum.SERVICE_OFFERING_NOT_FOUND,
-            ExceptionCodeEnum.BOOKING_NOT_FOUND
+            ExceptionCodeEnum.BOOKING_NOT_FOUND,
+            ExceptionCodeEnum.EMERGENCY_ALERT_NOT_FOUND
     );
 
     @ExceptionHandler(GenericException.class)
