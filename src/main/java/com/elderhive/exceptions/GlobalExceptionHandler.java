@@ -49,7 +49,8 @@ public class GlobalExceptionHandler {
             ExceptionCodeEnum.PASSWORD_TOO_WEAK,
             ExceptionCodeEnum.INVALID_ROLE,
             ExceptionCodeEnum.FILE_TYPE_NOT_ALLOWED,
-            ExceptionCodeEnum.INVALID_BOOKING_STATUS_TRANSITION
+            ExceptionCodeEnum.INVALID_BOOKING_STATUS_TRANSITION,
+            ExceptionCodeEnum.INVALID_EMERGENCY_ALERT_STATUS_TRANSITION
     );
 
     private static final Set<ExceptionCodeEnum> CONFLICT_CODES = Set.of(
@@ -57,7 +58,8 @@ public class GlobalExceptionHandler {
             ExceptionCodeEnum.DUPLICATE_EMAIL,
             ExceptionCodeEnum.COLOR_THEME_ALREADY_EXISTS,
             ExceptionCodeEnum.SERVICE_CATEGORY_ALREADY_EXISTS,
-            ExceptionCodeEnum.BOOKING_SLOT_UNAVAILABLE
+            ExceptionCodeEnum.BOOKING_SLOT_UNAVAILABLE,
+            ExceptionCodeEnum.EMERGENCY_ALERT_ALREADY_CLAIMED
     );
 
     private static final Set<ExceptionCodeEnum> NOT_FOUND_CODES = Set.of(

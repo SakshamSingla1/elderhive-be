@@ -96,7 +96,16 @@ public enum ExceptionCodeEnum {
     INVALID_BOOKING_STATUS_TRANSITION("INVALID_BOOKING_STATUS_TRANSITION"),
     // The requested caretaker/date/time slot is already taken by another non-terminal
     // booking - a scheduling conflict, not a missing-resource or bad-input problem.
-    BOOKING_SLOT_UNAVAILABLE("BOOKING_SLOT_UNAVAILABLE");
+    BOOKING_SLOT_UNAVAILABLE("BOOKING_SLOT_UNAVAILABLE"),
+
+    // ==== EMERGENCY ALERT ====
+    // A caretaker tried to claim an alert another caretaker already claimed first
+    // (Prompt 84's "first claim wins" rule) - a concurrency conflict, not a missing-
+    // resource or bad-input problem.
+    EMERGENCY_ALERT_ALREADY_CLAIMED("EMERGENCY_ALERT_ALREADY_CLAIMED"),
+    // A requested status change doesn't follow EmergencyAlertStatusEnum's lifecycle (e.g.
+    // RESOLVED -> TRIGGERED, or any change away from a terminal RESOLVED).
+    INVALID_EMERGENCY_ALERT_STATUS_TRANSITION("INVALID_EMERGENCY_ALERT_STATUS_TRANSITION");
 
     private final String value;
 
