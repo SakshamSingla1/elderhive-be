@@ -6,6 +6,8 @@ import com.elderhive.dtos.Emergency.EmergencyAlertTriggerRequest;
 import com.elderhive.entities.User;
 import com.elderhive.exceptions.GenericException;
 
+import java.util.List;
+
 public interface EmergencyAlertService {
 
     /**
@@ -42,4 +44,15 @@ public interface EmergencyAlertService {
      * it - exactly one of EmergencyAlertDispatchOverrideRequest's two fields must be set.
      */
     EmergencyAlertResponse dispatchOverride(Long id, User caller, EmergencyAlertDispatchOverrideRequest request) throws GenericException;
+
+    /**
+     * Prompt 86's caretaker queue: every TRIGGERED or ACKNOWLEDGED alert (system-wide)
+     * that the caller's own CaretakerProfile currently matches via Prompt 82's proximity
+     * query - re-run live, per active alert, against the caller's CURRENT location/radius
+     * rather than a stale snapshot of who was matched at trigger time, so a caretaker who
+     * moves (or updates their own serviceRadiusKm) sees an accurate list on every call.
+     * Ordered nearest-first; each result's distanceKm is set (every other endpoint leaves
+     * it null).
+     */
+    List<EmergencyAlertResponse> findNearbyActiveAlerts(User caller) throws GenericException;
 }

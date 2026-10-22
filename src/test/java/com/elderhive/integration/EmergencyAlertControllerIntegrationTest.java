@@ -40,6 +40,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -318,5 +319,70 @@ class EmergencyAlertControllerIntegrationTest {
                         .contentType("application/json").content(body))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.isOverdue").value(false));
+    }
+
+    @Test
+    void nearbyReturnsOnlyAlertsWithinRangeOfTheCallingCaretakerWithDistanceSetAndOrderedNearestFirst() throws Exception {
+        when(nominatimGeocodingClient.reverseGeocode(anyDouble(), anyDouble())).thenReturn(null);
+        User familyOwner = persistUser("ea-nearby-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
+        User nearCaretakerUser = persistUser("ea-nearby-near-caretaker@example.com", UserTypeEnum.CARETAKER);
+        User farCaretakerUser = persistUser("ea-nearby-far-caretaker@example.com", UserTypeEnum.CARETAKER);
+        persistCaretaker(nearCaretakerUser.getId(), 0.01, 0.0, 10.0, CaretakerVerificationStatusEnum.VERIFIED);
+        persistCaretaker(farCaretakerUser.getId(), 0.30, 0.0, 10.0, CaretakerVerificationStatusEnum.VERIFIED);
+        ElderProfile elderA = elderProfileRepository.save(ElderProfile.builder().familyUserId(familyOwner.getId()).fullName("Robert").build());
+        ElderProfile elderB = elderProfileRepository.save(ElderProfile.builder().familyUserId(familyOwner.getId()).fullName("Grandma Rose").build());
+
+        // Same longitude as both alerts (0.0) - on a shared meridian the haversine distance
+        // is exact: 0.01deg ~= 1.112km from the near caretaker, 0.04deg ~= 4.448km.
+        Long nearerAlertId = triggerAlert(familyOwner, elderA);
+        String secondBody = objectMapper.writeValueAsString(Map.of("elderProfileId", elderB.getId(), "latitude", 0.04, "longitude", 0.0));
+        MvcResult secondResult = mockMvc.perform(post("/api/v1/emergency-alerts").cookie(loginCookieFor(familyOwner))
+                        .contentType("application/json").content(secondBody))
+                .andExpect(status().isCreated()).andReturn();
+        Long furtherAlertId = objectMapper.readTree(secondResult.getResponse().getContentAsString()).at("/data/id").asLong();
+
+        mockMvc.perform(get("/api/v1/emergency-alerts/nearby").cookie(loginCookieFor(nearCaretakerUser)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(2))
+                .andExpect(jsonPath("$.data[0].id").value(nearerAlertId))
+                .andExpect(jsonPath("$.data[0].distanceKm").value(org.hamcrest.Matchers.closeTo(1.112, 0.01)))
+                .andExpect(jsonPath("$.data[0].elderName").value("Robert"))
+                .andExpect(jsonPath("$.data[1].id").value(furtherAlertId));
+
+        // The far caretaker's own radius (10km) doesn't reach either alert (33.4km away) -
+        // sees nothing at all.
+        mockMvc.perform(get("/api/v1/emergency-alerts/nearby").cookie(loginCookieFor(farCaretakerUser)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(0));
+    }
+
+    @Test
+    void nearbyNoLongerIncludesAnAlertOnceItsBeenResolved() throws Exception {
+        when(nominatimGeocodingClient.reverseGeocode(anyDouble(), anyDouble())).thenReturn(null);
+        User familyOwner = persistUser("ea-nearby-resolved-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
+        User caretakerUser = persistUser("ea-nearby-resolved-caretaker@example.com", UserTypeEnum.CARETAKER);
+        persistCaretaker(caretakerUser.getId(), 0.0, 0.0, 10.0, CaretakerVerificationStatusEnum.VERIFIED);
+        ElderProfile elder = elderProfileRepository.save(ElderProfile.builder().familyUserId(familyOwner.getId()).fullName("Robert").build());
+        Long alertId = triggerAlert(familyOwner, elder);
+
+        mockMvc.perform(get("/api/v1/emergency-alerts/nearby").cookie(loginCookieFor(caretakerUser)))
+                .andExpect(jsonPath("$.data.length()").value(1));
+
+        mockMvc.perform(put("/api/v1/emergency-alerts/" + alertId + "/claim").cookie(loginCookieFor(caretakerUser)))
+                .andExpect(status().isOk());
+        mockMvc.perform(put("/api/v1/emergency-alerts/" + alertId + "/resolve").cookie(loginCookieFor(caretakerUser)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/emergency-alerts/nearby").cookie(loginCookieFor(caretakerUser)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(0));
+    }
+
+    @Test
+    void nearbyReturns404ForACaretakerWithNoProfileYet() throws Exception {
+        User caretakerUser = persistUser("ea-nearby-noprofile@example.com", UserTypeEnum.CARETAKER);
+
+        mockMvc.perform(get("/api/v1/emergency-alerts/nearby").cookie(loginCookieFor(caretakerUser)))
+                .andExpect(status().isNotFound());
     }
 }

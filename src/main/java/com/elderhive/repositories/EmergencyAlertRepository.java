@@ -19,6 +19,13 @@ public interface EmergencyAlertRepository extends JpaRepository<EmergencyAlert, 
     // override needs to list unclaimed/unresolved alerts).
     Page<EmergencyAlert> findByStatus(EmergencyAlertStatusEnum status, Pageable pageable);
 
+    // Backs Prompt 86's "nearby active alerts" caretaker queue - every non-RESOLVED
+    // alert system-wide (TRIGGERED and ACKNOWLEDGED both included, so a caretaker also
+    // sees one another caretaker already claimed, not just unclaimed ones), filtered down
+    // to "nearby" in the service layer by re-running Prompt 82's own proximity match per
+    // alert rather than a second geo query here.
+    List<EmergencyAlert> findByStatusIn(List<EmergencyAlertStatusEnum> statuses);
+
     long countByStatus(EmergencyAlertStatusEnum status);
 
     // Backs Prompt 83's trigger flow: lets it detect whether this elder profile already

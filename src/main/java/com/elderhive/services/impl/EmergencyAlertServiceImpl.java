@@ -37,10 +37,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -175,6 +178,33 @@ public class EmergencyAlertServiceImpl implements EmergencyAlertService {
         return toResponse(saved, elderProfileRepository.findById(saved.getElderProfileId()).orElse(null));
     }
 
+    @Override
+    public List<EmergencyAlertResponse> findNearbyActiveAlerts(User caller) throws GenericException {
+        CaretakerProfile caretakerProfile = caretakerProfileRepository.findByUserId(caller.getId())
+                .orElseThrow(() -> new GenericException(ExceptionCodeEnum.CARETAKER_PROFILE_NOT_FOUND, "Caretaker profile not found"));
+
+        List<EmergencyAlert> activeAlerts = emergencyAlertRepository.findByStatusIn(
+                List.of(EmergencyAlertStatusEnum.TRIGGERED, EmergencyAlertStatusEnum.ACKNOWLEDGED));
+
+        List<EmergencyAlertResponse> nearby = new ArrayList<>();
+        for (EmergencyAlert alert : activeAlerts) {
+            // Re-runs Prompt 82's own query from THIS alert's coordinates and keeps only
+            // the match that's this caller's own CaretakerProfile (if present) - live
+            // against the caretaker's CURRENT location/serviceRadiusKm, not a snapshot of
+            // who was matched back when the alert first triggered.
+            Optional<CaretakerProximityMatch> ownMatch = proximityMatchingService
+                    .findMatchingCaretakers(alert.getLatitude(), alert.getLongitude()).stream()
+                    .filter(match -> Objects.equals(match.getCaretakerProfile().getId(), caretakerProfile.getId()))
+                    .findFirst();
+            if (ownMatch.isPresent()) {
+                ElderProfile elderProfile = elderProfileRepository.findById(alert.getElderProfileId()).orElse(null);
+                nearby.add(toResponse(alert, elderProfile, ownMatch.get().getDistanceKm()));
+            }
+        }
+        nearby.sort(Comparator.comparing(EmergencyAlertResponse::getDistanceKm, Comparator.nullsLast(Comparator.naturalOrder())));
+        return nearby;
+    }
+
     private EmergencyAlert findOrThrow(Long id) throws GenericException {
         return emergencyAlertRepository.findById(id)
                 .orElseThrow(() -> new GenericException(ExceptionCodeEnum.EMERGENCY_ALERT_NOT_FOUND, "Emergency alert not found"));
@@ -255,6 +285,12 @@ public class EmergencyAlertServiceImpl implements EmergencyAlertService {
     }
 
     private EmergencyAlertResponse toResponse(EmergencyAlert alert, ElderProfile elderProfile) throws GenericException {
+        return toResponse(alert, elderProfile, null);
+    }
+
+    // distanceKm is only ever non-null from findNearbyActiveAlerts above - every other
+    // caller passes null (see EmergencyAlertResponse.distanceKm's own javadoc).
+    private EmergencyAlertResponse toResponse(EmergencyAlert alert, ElderProfile elderProfile, Double distanceKm) throws GenericException {
         return EmergencyAlertResponse.builder()
                 .id(alert.getId())
                 .elderProfileId(alert.getElderProfileId())
@@ -268,6 +304,7 @@ public class EmergencyAlertServiceImpl implements EmergencyAlertService {
                 .respondingCaretakerName(resolveCaretakerName(alert.getRespondingCaretakerId()))
                 .responseTimeSeconds(alert.getResponseTimeSeconds())
                 .isOverdue(computeIsOverdue(alert))
+                .distanceKm(distanceKm)
                 .createdAt(alert.getCreatedAt())
                 .updatedAt(alert.getUpdatedAt())
                 .build();

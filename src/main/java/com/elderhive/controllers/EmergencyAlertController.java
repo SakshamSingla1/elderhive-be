@@ -16,6 +16,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -23,10 +24,12 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 /**
- * Trigger (Prompt 83) plus claim/resolve/dispatch-override (Prompt 84) - any read-back
- * (getById/search) endpoints still don't exist yet, same incremental pattern every other
- * Phase 11 prompt has followed so far.
+ * Trigger (Prompt 83), claim/resolve/dispatch-override (Prompt 84), and the caretaker
+ * "nearby active alerts" queue (Prompt 86) - a general getById/search for admin oversight
+ * still doesn't exist yet (Prompt 87's job).
  */
 @RestController
 @RequestMapping("/api/v1/emergency-alerts")
@@ -66,6 +69,16 @@ public class EmergencyAlertController {
     public ResponseEntity<ResponseModel<EmergencyAlertResponse>> dispatchOverride(
             @PathVariable Long id, @RequestBody EmergencyAlertDispatchOverrideRequest request) throws GenericException {
         return ApiResponse.successResponse(emergencyAlertService.dispatchOverride(id, currentUser(), request), "Emergency alert dispatch overridden");
+    }
+
+    // CARETAKER-only - EmergencyAlertServiceImpl#findNearbyActiveAlerts has no separate
+    // ownership check beyond resolving the caller's own CaretakerProfile, since the
+    // proximity re-match it runs per alert already IS the access control (an alert simply
+    // isn't in the result unless this specific caretaker is currently a genuine match).
+    @PreAuthorize("hasRole('CARETAKER')")
+    @GetMapping("/nearby")
+    public ResponseEntity<ResponseModel<List<EmergencyAlertResponse>>> nearby() throws GenericException {
+        return ApiResponse.successResponse(emergencyAlertService.findNearbyActiveAlerts(currentUser()), "Nearby active alerts fetched");
     }
 
     private User currentUser() throws GenericException {

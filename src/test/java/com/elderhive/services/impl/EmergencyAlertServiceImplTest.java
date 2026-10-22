@@ -467,4 +467,69 @@ class EmergencyAlertServiceImplTest {
         assertThat(response.getStatus()).isEqualTo(EmergencyAlertStatusEnum.RESOLVED);
         assertThat(response.isOverdue()).isFalse();
     }
+
+    // ==== findNearbyActiveAlerts ====
+
+    private EmergencyAlert activeAlert(long id, double latitude, double longitude, EmergencyAlertStatusEnum status) {
+        EmergencyAlert alert = EmergencyAlert.builder().id(id).elderProfileId(ELDER_PROFILE_ID).triggeredByUserId(FAMILY_OWNER_ID)
+                .latitude(latitude).longitude(longitude).status(status).build();
+        alert.setCreatedAt(LocalDateTime.now());
+        return alert;
+    }
+
+    @Test
+    void findNearbyActiveAlertsReturnsOnlyAlertsWhereTheCallerIsACurrentMatchOrderedByDistance() throws GenericException {
+        when(caretakerProfileRepository.findByUserId(200L)).thenReturn(Optional.of(CaretakerProfile.builder().id(30L).userId(200L).build()));
+        when(elderProfileRepository.findById(ELDER_PROFILE_ID)).thenReturn(Optional.of(elderProfile()));
+        stubEscalationTimeoutMinutes(15);
+
+        EmergencyAlert nearAlert = activeAlert(501L, 0.01, 0.0, EmergencyAlertStatusEnum.TRIGGERED);
+        EmergencyAlert farAlert = activeAlert(502L, 0.04, 0.0, EmergencyAlertStatusEnum.ACKNOWLEDGED);
+        // Some OTHER caretaker's own match, never this caller's - must not appear at all.
+        EmergencyAlert notMyMatchAlert = activeAlert(503L, 0.1, 0.0, EmergencyAlertStatusEnum.TRIGGERED);
+
+        // Deliberately returned out of distance order - the service must sort, not just
+        // pass the repository's own ordering through.
+        when(emergencyAlertRepository.findByStatusIn(List.of(EmergencyAlertStatusEnum.TRIGGERED, EmergencyAlertStatusEnum.ACKNOWLEDGED)))
+                .thenReturn(List.of(farAlert, nearAlert, notMyMatchAlert));
+        when(proximityMatchingService.findMatchingCaretakers(0.01, 0.0)).thenReturn(List.of(match(30L, 200L, 1.1)));
+        when(proximityMatchingService.findMatchingCaretakers(0.04, 0.0)).thenReturn(List.of(match(30L, 200L, 4.4)));
+        when(proximityMatchingService.findMatchingCaretakers(0.1, 0.0)).thenReturn(List.of(match(31L, 201L, 2.0)));
+
+        List<EmergencyAlertResponse> result = service.findNearbyActiveAlerts(caller(200L, UserTypeEnum.CARETAKER));
+
+        assertThat(result).extracting(EmergencyAlertResponse::getId).containsExactly(501L, 502L);
+        assertThat(result.get(0).getDistanceKm()).isEqualTo(1.1);
+        assertThat(result.get(1).getDistanceKm()).isEqualTo(4.4);
+    }
+
+    @Test
+    void findNearbyActiveAlertsThrowsWhenTheCallerHasNoCaretakerProfile() {
+        when(caretakerProfileRepository.findByUserId(200L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.findNearbyActiveAlerts(caller(200L, UserTypeEnum.CARETAKER)))
+                .isInstanceOf(GenericException.class)
+                .extracting(ex -> ((GenericException) ex).getExceptionCode())
+                .isEqualTo(ExceptionCodeEnum.CARETAKER_PROFILE_NOT_FOUND);
+    }
+
+    @Test
+    void findNearbyActiveAlertsReturnsEmptyWhenNoActiveAlertCurrentlyMatchesTheCaller() throws GenericException {
+        when(caretakerProfileRepository.findByUserId(200L)).thenReturn(Optional.of(CaretakerProfile.builder().id(30L).userId(200L).build()));
+        EmergencyAlert alert = activeAlert(501L, 0.1, 0.0, EmergencyAlertStatusEnum.TRIGGERED);
+        when(emergencyAlertRepository.findByStatusIn(any())).thenReturn(List.of(alert));
+        when(proximityMatchingService.findMatchingCaretakers(0.1, 0.0)).thenReturn(List.of());
+
+        assertThat(service.findNearbyActiveAlerts(caller(200L, UserTypeEnum.CARETAKER))).isEmpty();
+    }
+
+    @Test
+    void findNearbyActiveAlertsOnlyQueriesTriggeredAndAcknowledgedStatuses() throws GenericException {
+        when(caretakerProfileRepository.findByUserId(200L)).thenReturn(Optional.of(CaretakerProfile.builder().id(30L).userId(200L).build()));
+        when(emergencyAlertRepository.findByStatusIn(any())).thenReturn(List.of());
+
+        service.findNearbyActiveAlerts(caller(200L, UserTypeEnum.CARETAKER));
+
+        verify(emergencyAlertRepository).findByStatusIn(List.of(EmergencyAlertStatusEnum.TRIGGERED, EmergencyAlertStatusEnum.ACKNOWLEDGED));
+    }
 }

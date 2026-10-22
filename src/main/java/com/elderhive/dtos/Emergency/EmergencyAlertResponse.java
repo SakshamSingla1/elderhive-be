@@ -38,6 +38,10 @@ public class EmergencyAlertResponse {
     // "overdue" instead of "isOverdue" unless pinned explicitly like this.
     @Getter(onMethod_ = @__(@JsonProperty("isOverdue")))
     private boolean isOverdue;
+    // Only populated by Prompt 86's GET /emergency-alerts/nearby (the requesting
+    // caretaker's own distance to this specific alert) - null from every other endpoint,
+    // which have no single caretaker viewpoint to measure a distance from.
+    private Double distanceKm;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }
