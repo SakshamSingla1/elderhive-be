@@ -56,6 +56,16 @@ public class NotificationServiceImpl implements NotificationService {
     @Override
     @Transactional
     public void send(String templateKey, Map<String, String> variables, Long targetUserId) throws GenericException {
+        doSend(templateKey, variables, targetUserId, false);
+    }
+
+    @Override
+    @Transactional
+    public void sendUrgent(String templateKey, Map<String, String> variables, Long targetUserId) throws GenericException {
+        doSend(templateKey, variables, targetUserId, true);
+    }
+
+    private void doSend(String templateKey, Map<String, String> variables, Long targetUserId, boolean bypassPreferences) throws GenericException {
         userRepository.findById(targetUserId)
                 .orElseThrow(() -> new GenericException(ExceptionCodeEnum.USER_NOT_FOUND,
                         "User not found: " + targetUserId));
@@ -81,12 +91,15 @@ public class NotificationServiceImpl implements NotificationService {
         // gated at all).
         writeDeliveryLog(notification, NotificationChannelEnum.IN_APP, rendered);
 
-        NotificationPreference preference = notificationPreferenceRepository
+        // bypassPreferences (sendUrgent) skips this lookup entirely - every channel the
+        // template supports is enabled unconditionally, so targetUserId's own preference
+        // (or lack thereof) never comes into play.
+        NotificationPreference preference = bypassPreferences ? null : notificationPreferenceRepository
                 .findByUserIdAndType(targetUserId, type)
                 .orElse(null);
-        boolean smsEnabled = preference != null && preference.isSmsEnabled();
-        boolean emailEnabled = preference != null && preference.isEmailEnabled();
-        boolean webPushEnabled = preference != null && preference.isWebPushEnabled();
+        boolean smsEnabled = bypassPreferences || (preference != null && preference.isSmsEnabled());
+        boolean emailEnabled = bypassPreferences || (preference != null && preference.isEmailEnabled());
+        boolean webPushEnabled = bypassPreferences || (preference != null && preference.isWebPushEnabled());
 
         if (template.isSms() && smsEnabled) {
             log.info("Simulated SMS to user {}: {}", targetUserId, rendered.subject());

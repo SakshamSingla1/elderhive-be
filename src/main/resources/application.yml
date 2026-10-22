@@ -94,6 +94,12 @@ app:
     # handler - keep the two in sync (they read the same property).
     upload-dir: ${FILE_UPLOAD_DIR:uploads}
     public-base-url: ${FILE_PUBLIC_BASE_URL:${app.url}/uploads}
+  geocoding:
+    # Nominatim's usage policy (https://operations.osmfoundation.org/policies/nominatim/)
+    # requires a real contact identifier in every request's User-Agent - NominatimGeocodingClient
+    # (Prompt 83) reads this to build it. The default is fine for local dev; a real
+    # deployment should set a real support address.
+    contact-email: ${GEOCODING_CONTACT_EMAIL:support@elderhive.app}
 
 # Blank by default -> CloudinaryConfig#isConfigured() is false and FileStorageServiceImpl's
 # uploads transparently fall back to local disk (app.file-storage.upload-dir above) - safe

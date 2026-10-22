@@ -34,6 +34,17 @@ public interface NotificationService {
      */
     void send(String templateKey, Map<String, String> variables, Long targetUserId) throws GenericException;
 
+    /**
+     * Identical to {@link #send}, except every channel the template supports
+     * (isSms/isEmail/isWebPush) is delivered UNCONDITIONALLY, ignoring targetUserId's own
+     * NotificationPreference row entirely — IN_APP was already unconditional either way.
+     * Reserved for templates where a channel preference must never be allowed to suppress
+     * delivery (Prompt 83's EMERGENCY_ALERT_* templates: an emergency alert overrides
+     * channel preferences by design), never a per-call opt-in a caller can reach for on an
+     * ordinary template.
+     */
+    void sendUrgent(String templateKey, Map<String, String> variables, Long targetUserId) throws GenericException;
+
     /** The caller's own notifications, newest first. */
     Page<NotificationResponse> getByUser(Long userId, Pageable pageable);
 

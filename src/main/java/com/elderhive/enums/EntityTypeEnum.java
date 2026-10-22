@@ -7,5 +7,6 @@ package com.elderhive.enums;
  */
 public enum EntityTypeEnum {
     USER,
-    ROLE
+    ROLE,
+    EMERGENCY_ALERT
 }
