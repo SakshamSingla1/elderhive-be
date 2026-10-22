@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -167,5 +168,52 @@ class CaretakerProfileRepositoryTest {
         entityManager.clear();
 
         assertThat(caretakerProfileRepository.findById(saved.getId())).isEmpty();
+    }
+
+    @Test
+    void findVerifiedWithinRadiusReturnsOnlyInRadiusVerifiedCaretakersOrderedByDistanceAscending() {
+        // All caretakers share the alert's own longitude (0.0) - on a shared meridian the
+        // haversine formula collapses to EARTH_RADIUS_KM * latitudeDeltaInRadians exactly
+        // (cos(deltaLongitude)=1), so these distances are exact, not approximate:
+        // 0.01deg ~= 1.112km, 0.04deg ~= 4.448km, 0.15deg ~= 16.679km, 0.30deg ~= 33.358km.
+        User nearUser = persistUser("cp-radius-near@example.com");
+        User midUser = persistUser("cp-radius-mid@example.com");
+        User farUser = persistUser("cp-radius-far@example.com");
+        User tooFarUser = persistUser("cp-radius-toofar@example.com");
+        User unverifiedUser = persistUser("cp-radius-unverified@example.com");
+        User noCoordsUser = persistUser("cp-radius-nocoords@example.com");
+
+        // ~1.112km away, well within its own tight 5km radius.
+        CaretakerProfile near = caretakerProfileRepository.save(CaretakerProfile.builder()
+                .userId(nearUser.getId()).verificationStatus(CaretakerVerificationStatusEnum.VERIFIED)
+                .latitude(0.01).longitude(0.0).serviceRadiusKm(5.0).build());
+        // ~4.448km away, no serviceRadiusKm set - must fall back to the 10km default
+        // passed into the query (within it).
+        CaretakerProfile mid = caretakerProfileRepository.save(CaretakerProfile.builder()
+                .userId(midUser.getId()).verificationStatus(CaretakerVerificationStatusEnum.VERIFIED)
+                .latitude(0.04).longitude(0.0).build());
+        // ~16.679km away, outside the 10km default but within its OWN larger 20km radius -
+        // proves per-caretaker radius is honored, not a single global cutoff.
+        CaretakerProfile far = caretakerProfileRepository.save(CaretakerProfile.builder()
+                .userId(farUser.getId()).verificationStatus(CaretakerVerificationStatusEnum.VERIFIED)
+                .latitude(0.15).longitude(0.0).serviceRadiusKm(20.0).build());
+        // ~33.358km away, outside its own 10km radius - excluded.
+        caretakerProfileRepository.save(CaretakerProfile.builder()
+                .userId(tooFarUser.getId()).verificationStatus(CaretakerVerificationStatusEnum.VERIFIED)
+                .latitude(0.30).longitude(0.0).serviceRadiusKm(10.0).build());
+        // ~1.112km away (closer than every included match) but PENDING, not VERIFIED - excluded.
+        caretakerProfileRepository.save(CaretakerProfile.builder()
+                .userId(unverifiedUser.getId()).verificationStatus(CaretakerVerificationStatusEnum.PENDING)
+                .latitude(0.01).longitude(0.0).serviceRadiusKm(5.0).build());
+        // No coordinates at all - can't be matched regardless of radius.
+        caretakerProfileRepository.save(CaretakerProfile.builder()
+                .userId(noCoordsUser.getId()).verificationStatus(CaretakerVerificationStatusEnum.VERIFIED)
+                .serviceRadiusKm(5.0).build());
+        entityManager.flush();
+
+        List<CaretakerProfile> matches = caretakerProfileRepository.findVerifiedWithinRadius(0.0, 0.0, 10.0);
+
+        assertThat(matches).extracting(CaretakerProfile::getId)
+                .containsExactly(near.getId(), mid.getId(), far.getId());
     }
 }
