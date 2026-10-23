@@ -127,7 +127,7 @@ class BookingControllerIntegrationTest {
 
     /** Bundles a ready-to-book fixture: an available caretaker + offering + elder profile
      *  owned by the returned family cookie. */
-    private record Fixture(Cookie familyCookie, Long elderProfileId, Cookie caretakerCookie, Long caretakerId, Long offeringId) {
+    private record Fixture(Cookie familyCookie, Long elderProfileId, Cookie caretakerCookie, Long caretakerId, Long caretakerUserId, Long offeringId) {
     }
 
     private Fixture setUpBookableFixture(String prefix) throws Exception {
@@ -141,7 +141,7 @@ class BookingControllerIntegrationTest {
         addAvailability(caretakerCookie, "MONDAY", "09:00:00", "12:00:00");
 
         Long offeringId = persistServiceOffering(prefix, 60);
-        return new Fixture(familyCookie, elder.getId(), caretakerCookie, caretakerId, offeringId);
+        return new Fixture(familyCookie, elder.getId(), caretakerCookie, caretakerId, caretakerUser.getId(), offeringId);
     }
 
     @Test
@@ -155,6 +155,7 @@ class BookingControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.status").value("PENDING"))
                 .andExpect(jsonPath("$.data.cost").value(40.00))
                 .andExpect(jsonPath("$.data.elderName").value("Robert"))
+                .andExpect(jsonPath("$.data.caretakerUserId").value(f.caretakerUserId()))
                 .andReturn();
         Long id = objectMapper.readTree(createResult.getResponse().getContentAsString()).get("data").get("id").asLong();
 

@@ -14,6 +14,10 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class CaretakerSearchResult {
     private Long id;
+    // Added Prompt 92 - lets a caretaker-facing search result be matched against
+    // presence.PresenceService (keyed by user id, not this CaretakerProfile's own id)
+    // without a second round trip per result.
+    private Long userId;
     private String name;
     private String specialtiesSummary;
     private Double ratingAverage;

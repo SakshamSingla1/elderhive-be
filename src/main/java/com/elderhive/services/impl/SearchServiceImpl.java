@@ -100,6 +100,7 @@ public class SearchServiceImpl implements SearchService {
                 : null;
         return CaretakerSearchResult.builder()
                 .id(profile.getId())
+                .userId(profile.getUserId())
                 .name(user != null ? user.getFullName() : null)
                 .specialtiesSummary(summarizeSpecialties(profile.getSpecialties()))
                 .ratingAverage(profile.getRatingAverage())

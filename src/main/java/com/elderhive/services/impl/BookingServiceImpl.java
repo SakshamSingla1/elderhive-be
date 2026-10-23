@@ -358,6 +358,7 @@ public class BookingServiceImpl implements BookingService {
                 .elderName(elderProfile != null ? elderProfile.getFullName() : null)
                 .caretakerId(booking.getCaretakerId())
                 .caretakerName(caretakerName)
+                .caretakerUserId(caretaker != null ? caretaker.getUserId() : null)
                 .serviceOfferingId(booking.getServiceOfferingId())
                 .serviceName(offering != null ? offering.getName() : null)
                 .scheduledDate(booking.getScheduledDate())

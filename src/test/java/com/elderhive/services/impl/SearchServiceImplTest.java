@@ -93,6 +93,7 @@ class SearchServiceImplTest {
         assertThat(results).hasSize(1);
         CaretakerSearchResult result = results.get(0);
         assertThat(result.getId()).isEqualTo(100L);
+        assertThat(result.getUserId()).isEqualTo(1L);
         assertThat(result.getName()).isEqualTo("Carla Caretaker");
         assertThat(result.getSpecialtiesSummary()).isEqualTo("Mobility Assistance");
         assertThat(result.getDistanceKm()).isNull();
