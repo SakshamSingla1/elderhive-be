@@ -78,7 +78,8 @@ public class GlobalExceptionHandler {
             ExceptionCodeEnum.SERVICE_OFFERING_NOT_FOUND,
             ExceptionCodeEnum.BOOKING_NOT_FOUND,
             ExceptionCodeEnum.EMERGENCY_ALERT_NOT_FOUND,
-            ExceptionCodeEnum.REVIEW_NOT_FOUND
+            ExceptionCodeEnum.REVIEW_NOT_FOUND,
+            ExceptionCodeEnum.CONVERSATION_NOT_FOUND
     );
 
     @ExceptionHandler(GenericException.class)

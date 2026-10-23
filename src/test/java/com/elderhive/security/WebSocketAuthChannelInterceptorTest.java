@@ -1,6 +1,12 @@
 package com.elderhive.security;
 
+import com.elderhive.entities.Conversation;
+import com.elderhive.repositories.ConversationRepository;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessagingException;
 import org.springframework.messaging.simp.stomp.StompCommand;
@@ -9,18 +15,25 @@ import org.springframework.messaging.support.MessageBuilder;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.when;
 
 /**
  * Pure unit tests (no Spring context needed) - builds raw STOMP frames via
  * StompHeaderAccessor the same way the real message channel would, with sessionAttributes
  * standing in for what WebSocketJwtHandshakeInterceptor stashed at handshake time.
  */
+@ExtendWith(MockitoExtension.class)
 class WebSocketAuthChannelInterceptorTest {
 
-    private final WebSocketAuthChannelInterceptor interceptor = new WebSocketAuthChannelInterceptor();
+    @Mock
+    private ConversationRepository conversationRepository;
+
+    @InjectMocks
+    private WebSocketAuthChannelInterceptor interceptor;
 
     private Message<byte[]> frame(StompCommand command, String destination, Long userId, String userType) {
         StompHeaderAccessor accessor = StompHeaderAccessor.create(command);
@@ -120,5 +133,57 @@ class WebSocketAuthChannelInterceptorTest {
         assertThatThrownBy(() -> interceptor.preSend(
                 frame(StompCommand.SUBSCRIBE, "/topic/emergency-alerts", 42L, "ELDER"), null))
                 .isInstanceOf(MessagingException.class);
+    }
+
+    @Test
+    void aParticipantCanSubscribeToTheirOwnConversationTopic() {
+        when(conversationRepository.findById(5L)).thenReturn(Optional.of(
+                Conversation.builder().id(5L).userAId(42L).userBId(99L).build()));
+
+        Message<?> result = interceptor.preSend(
+                frame(StompCommand.SUBSCRIBE, "/topic/conversations/5", 42L, "FAMILY_MEMBER"), null);
+
+        assertThat(result).isNotNull();
+    }
+
+    @Test
+    void theOtherParticipantCanAlsoSubscribeToTheConversationTopic() {
+        when(conversationRepository.findById(5L)).thenReturn(Optional.of(
+                Conversation.builder().id(5L).userAId(42L).userBId(99L).build()));
+
+        Message<?> result = interceptor.preSend(
+                frame(StompCommand.SUBSCRIBE, "/topic/conversations/5", 99L, "CARETAKER"), null);
+
+        assertThat(result).isNotNull();
+    }
+
+    @Test
+    void aNonParticipantCannotSubscribeToTheConversationTopic() {
+        when(conversationRepository.findById(5L)).thenReturn(Optional.of(
+                Conversation.builder().id(5L).userAId(42L).userBId(99L).build()));
+
+        assertThatThrownBy(() -> interceptor.preSend(
+                frame(StompCommand.SUBSCRIBE, "/topic/conversations/5", 7L, "FAMILY_MEMBER"), null))
+                .isInstanceOf(MessagingException.class);
+    }
+
+    @Test
+    void subscribingToAnUnknownConversationTopicIsRejected() {
+        when(conversationRepository.findById(5L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> interceptor.preSend(
+                frame(StompCommand.SUBSCRIBE, "/topic/conversations/5", 42L, "FAMILY_MEMBER"), null))
+                .isInstanceOf(MessagingException.class);
+    }
+
+    @Test
+    void anAdminMaySubscribeToAnyConversationTopic() {
+        when(conversationRepository.findById(5L)).thenReturn(Optional.of(
+                Conversation.builder().id(5L).userAId(42L).userBId(99L).build()));
+
+        Message<?> result = interceptor.preSend(
+                frame(StompCommand.SUBSCRIBE, "/topic/conversations/5", 1L, "ADMIN"), null);
+
+        assertThat(result).isNotNull();
     }
 }

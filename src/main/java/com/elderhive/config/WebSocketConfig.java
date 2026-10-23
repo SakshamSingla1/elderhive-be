@@ -22,12 +22,16 @@ import java.util.List;
  * <ul>
  *   <li>/topic/notifications/{userId} — new notifications for that user (Prompt 58's
  *       NotificationService pushes here via SimpMessagingTemplate)</li>
+ *   <li>/topic/emergency-alerts — live claim/resolve/dispatch-override broadcast
+ *       (Prompt 87's EmergencyAlertServiceImpl)</li>
+ *   <li>/topic/conversations/{conversationId} — new chat messages (Prompt 89's
+ *       MessagingServiceImpl)</li>
  * </ul>
  *
- * <p>No application destination prefix is configured — nothing in ElderHive yet has a
- * client publishes to the server over this socket (unlike ElderSphere's chat typing
- * indicator); a later phase that needs that can add
- * {@code registry.setApplicationDestinationPrefixes("/app")} then.
+ * <p>The {@code /app} application destination prefix (Prompt 89) is where a client SENDs a
+ * STOMP frame the server itself handles ({@code @MessageMapping}, see
+ * ChatWebSocketController) - distinct from {@code /topic}, which only the server ever
+ * publishes to.
  */
 @Configuration
 @EnableWebSocketMessageBroker
@@ -57,6 +61,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
         registry.enableSimpleBroker("/topic");
+        registry.setApplicationDestinationPrefixes("/app");
     }
 
     @Override

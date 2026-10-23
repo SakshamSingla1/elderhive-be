@@ -112,7 +112,10 @@ public enum ExceptionCodeEnum {
     REVIEW_NOT_FOUND("REVIEW_NOT_FOUND"),
     // This booking already has a review (Prompt 88's own "one review per booking" rule) -
     // a conflict, not a missing-resource or bad-input problem.
-    DUPLICATE_REVIEW("DUPLICATE_REVIEW");
+    DUPLICATE_REVIEW("DUPLICATE_REVIEW"),
+
+    // ==== MESSAGING ====
+    CONVERSATION_NOT_FOUND("CONVERSATION_NOT_FOUND");
 
     private final String value;
 
