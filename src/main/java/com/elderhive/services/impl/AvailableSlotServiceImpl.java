@@ -72,11 +72,22 @@ public class AvailableSlotServiceImpl implements AvailableSlotService {
         TreeSet<LocalTime> availableSlots = new TreeSet<>();
         for (Window window : effectiveWindows) {
             LocalTime slotStart = window.start();
-            while (!slotStart.plusMinutes(slotDurationMinutes).isAfter(window.end())) {
+            while (true) {
+                LocalTime slotEnd = slotStart.plusMinutes(slotDurationMinutes);
+                // LocalTime arithmetic wraps at midnight rather than overflowing (e.g.
+                // 23:00 + 60min = 00:00), so a naive "!isAfter(window.end())" check never
+                // trips for a window that runs late enough to wrap - this slotEnd.isBefore
+                // check catches that wraparound explicitly and stops the window there,
+                // same as reaching window.end() normally would. A caretaker's availability
+                // is scoped to a single calendar day, so a slot is never offered past
+                // midnight into the next date anyway.
+                if (slotEnd.isBefore(slotStart) || slotEnd.isAfter(window.end())) {
+                    break;
+                }
                 if (!bookedTimes.contains(slotStart)) {
                     availableSlots.add(slotStart);
                 }
-                slotStart = slotStart.plusMinutes(slotDurationMinutes);
+                slotStart = slotEnd;
             }
         }
 

@@ -22,13 +22,20 @@ import java.util.Map;
  * every connect/disconnect transition). {@code @RestController} already carries
  * {@code @Controller} as a meta-annotation, so this same class can also host the STOMP
  * heartbeat mapping below - Spring's STOMP message dispatch and its HTTP
- * DispatcherServlet/Security filter chain are two entirely separate pathways (the class-level
- * {@code @PreAuthorize}/{@code @RequestMapping} below are inert for the STOMP method; a SEND
- * frame is only reachable at all once WebSocketJwtHandshakeInterceptor has already
- * authenticated the underlying session, same precedent ChatWebSocketController's own send()
- * relies on).
+ * DispatcherServlet/Security filter chain genuinely are two separate pathways (no CSRF/
+ * header-auth filter runs for a SEND frame), BUT {@code @PreAuthorize} is woven in as a
+ * method-level AOP interceptor on the bean itself, which fires for ANY invocation of that
+ * method regardless of entry point - a class-level {@code @PreAuthorize} here previously
+ * wrapped heartbeat() too, and every call failed with AuthenticationCredentialsNotFoundException
+ * (STOMP message handling never populates SecurityContextHolder - identity comes from the
+ * session attributes WebSocketJwtHandshakeInterceptor stashed at handshake time instead, read
+ * directly below). Found live during Prompt 92's own end-to-end verification: the heartbeat
+ * was silently failing every ~20s, so a caretaker's presence quietly expired after
+ * PresenceTracker's own 45s staleness window instead of being kept alive by it. Fixed by
+ * moving {@code @PreAuthorize} to method level, on getStatus() only - heartbeat() relies
+ * purely on the session attribute check it already had, same precedent
+ * ChatWebSocketController's own send() uses.
  */
-@PreAuthorize("isAuthenticated()")
 @RestController
 @RequestMapping("/api/v1/presence")
 @RequiredArgsConstructor
@@ -36,6 +43,7 @@ public class PresenceController {
 
     private final PresenceService presenceService;
 
+    @PreAuthorize("isAuthenticated()")
     @GetMapping("/status")
     public ResponseEntity<ResponseModel<Map<Long, Boolean>>> getStatus(@RequestParam List<Long> userIds) {
         return ApiResponse.successResponse(presenceService.getStatus(userIds), "Presence status fetched successfully");

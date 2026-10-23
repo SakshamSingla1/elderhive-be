@@ -165,4 +165,39 @@ class AvailableSlotServiceImplTest {
 
         assertThat(response.getAvailableSlots()).containsExactly(LocalTime.of(9, 0), LocalTime.of(9, 30));
     }
+
+    // Regression test for a real infinite loop found live (Prompt 92's own end-to-end
+    // verification): LocalTime arithmetic wraps at midnight rather than overflowing, so a
+    // window running late enough that a slot's own end time wraps past 00:00 (23:00 +
+    // 60min = 00:00, which is never "after" a 23:30 window end) used to spin forever
+    // instead of terminating. Each of these must return promptly, not hang.
+    @Test
+    void aWindowRunningToJustBeforeMidnightTerminatesWithoutOfferingASlotThatWouldCrossIntoTheNextDay() throws GenericException {
+        when(caretakerProfileRepository.existsById(5L)).thenReturn(true);
+        when(serviceOfferingRepository.findById(1L)).thenReturn(Optional.of(offering(60)));
+        when(caretakerAvailabilityRepository.findByCaretakerIdOrderByDayOfWeekAscStartTimeAsc(5L))
+                .thenReturn(List.of(window(DayOfWeekEnum.MONDAY, "00:00", "23:30")));
+        when(bookingRepository.findByCaretakerIdAndScheduledDateAndStatusIn(anyLong(), any(), any())).thenReturn(List.of());
+
+        AvailableSlotsResponse response = service.getAvailableSlots(5L, MONDAY, 1L);
+
+        assertThat(response.getAvailableSlots()).hasSize(23);
+        assertThat(response.getAvailableSlots().get(0)).isEqualTo(LocalTime.of(0, 0));
+        assertThat(response.getAvailableSlots().get(22)).isEqualTo(LocalTime.of(22, 0));
+    }
+
+    @Test
+    void aWindowEndingExactlyAtMidnightTerminatesWithoutHanging() throws GenericException {
+        when(caretakerProfileRepository.existsById(5L)).thenReturn(true);
+        when(serviceOfferingRepository.findById(1L)).thenReturn(Optional.of(offering(30)));
+        when(caretakerAvailabilityRepository.findByCaretakerIdOrderByDayOfWeekAscStartTimeAsc(5L))
+                .thenReturn(List.of(window(DayOfWeekEnum.MONDAY, "23:00", "23:59:59")));
+        when(bookingRepository.findByCaretakerIdAndScheduledDateAndStatusIn(anyLong(), any(), any())).thenReturn(List.of());
+
+        AvailableSlotsResponse response = service.getAvailableSlots(5L, MONDAY, 1L);
+
+        // 23:30 is deliberately NOT offered - a 30-minute slot starting then would run
+        // until exactly midnight, crossing into the next calendar date.
+        assertThat(response.getAvailableSlots()).containsExactly(LocalTime.of(23, 0));
+    }
 }
