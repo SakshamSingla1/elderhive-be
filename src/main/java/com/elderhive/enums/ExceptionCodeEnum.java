@@ -106,7 +106,13 @@ public enum ExceptionCodeEnum {
     EMERGENCY_ALERT_ALREADY_CLAIMED("EMERGENCY_ALERT_ALREADY_CLAIMED"),
     // A requested status change doesn't follow EmergencyAlertStatusEnum's lifecycle (e.g.
     // RESOLVED -> TRIGGERED, or any change away from a terminal RESOLVED).
-    INVALID_EMERGENCY_ALERT_STATUS_TRANSITION("INVALID_EMERGENCY_ALERT_STATUS_TRANSITION");
+    INVALID_EMERGENCY_ALERT_STATUS_TRANSITION("INVALID_EMERGENCY_ALERT_STATUS_TRANSITION"),
+
+    // ==== REVIEW ====
+    REVIEW_NOT_FOUND("REVIEW_NOT_FOUND"),
+    // This booking already has a review (Prompt 88's own "one review per booking" rule) -
+    // a conflict, not a missing-resource or bad-input problem.
+    DUPLICATE_REVIEW("DUPLICATE_REVIEW");
 
     private final String value;
 

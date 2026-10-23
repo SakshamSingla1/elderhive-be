@@ -11,6 +11,7 @@ import com.elderhive.enums.ExceptionCodeEnum;
 import com.elderhive.enums.UserTypeEnum;
 import com.elderhive.exceptions.GenericException;
 import com.elderhive.repositories.CaretakerProfileRepository;
+import com.elderhive.repositories.ReviewRepository;
 import com.elderhive.repositories.ServiceCategoryRepository;
 import com.elderhive.repositories.UserRepository;
 import com.elderhive.services.CaretakerProfileService;
@@ -39,6 +40,7 @@ public class CaretakerProfileServiceImpl implements CaretakerProfileService {
     private final CaretakerProfileRepository caretakerProfileRepository;
     private final UserRepository userRepository;
     private final ServiceCategoryRepository serviceCategoryRepository;
+    private final ReviewRepository reviewRepository;
 
     @Override
     @Transactional
@@ -85,6 +87,16 @@ public class CaretakerProfileServiceImpl implements CaretakerProfileService {
     public Page<CaretakerProfileResponse> getAll(Pageable pageable) {
         return caretakerProfileRepository.findAll(pageable)
                 .map(profile -> toResponse(profile, userRepository.findById(profile.getUserId()).orElse(null)));
+    }
+
+    @Override
+    @Transactional
+    public void recomputeRatingAverage(Long caretakerId) throws GenericException {
+        CaretakerProfile profile = caretakerProfileRepository.findById(caretakerId)
+                .orElseThrow(() -> new GenericException(ExceptionCodeEnum.CARETAKER_PROFILE_NOT_FOUND, "Caretaker profile not found"));
+        Double average = reviewRepository.findAverageOverallRatingByCaretakerId(caretakerId);
+        profile.setRatingAverage(average != null ? average : 0.0);
+        caretakerProfileRepository.save(profile);
     }
 
     /** Resolves a submitted set of ServiceCategory ids (Prompt 72) to the real entities -

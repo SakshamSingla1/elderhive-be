@@ -16,4 +16,13 @@ public interface CaretakerProfileService {
     CaretakerProfileResponse getById(Long id) throws GenericException;
 
     Page<CaretakerProfileResponse> getAll(Pageable pageable);
+
+    /**
+     * Recomputes and persists this caretaker's denormalized ratingAverage from every
+     * Review currently on file for them (a plain application-code aggregate query, not a
+     * DB trigger - Prompt 88's own explicit instruction). Called by
+     * ReviewServiceImpl right after a new review is saved; a caretaker with zero reviews
+     * resets to 0.0 rather than being left stale or null.
+     */
+    void recomputeRatingAverage(Long caretakerId) throws GenericException;
 }

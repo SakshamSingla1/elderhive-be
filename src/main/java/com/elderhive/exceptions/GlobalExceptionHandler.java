@@ -59,7 +59,8 @@ public class GlobalExceptionHandler {
             ExceptionCodeEnum.COLOR_THEME_ALREADY_EXISTS,
             ExceptionCodeEnum.SERVICE_CATEGORY_ALREADY_EXISTS,
             ExceptionCodeEnum.BOOKING_SLOT_UNAVAILABLE,
-            ExceptionCodeEnum.EMERGENCY_ALERT_ALREADY_CLAIMED
+            ExceptionCodeEnum.EMERGENCY_ALERT_ALREADY_CLAIMED,
+            ExceptionCodeEnum.DUPLICATE_REVIEW
     );
 
     private static final Set<ExceptionCodeEnum> NOT_FOUND_CODES = Set.of(
@@ -76,7 +77,8 @@ public class GlobalExceptionHandler {
             ExceptionCodeEnum.SERVICE_CATEGORY_NOT_FOUND,
             ExceptionCodeEnum.SERVICE_OFFERING_NOT_FOUND,
             ExceptionCodeEnum.BOOKING_NOT_FOUND,
-            ExceptionCodeEnum.EMERGENCY_ALERT_NOT_FOUND
+            ExceptionCodeEnum.EMERGENCY_ALERT_NOT_FOUND,
+            ExceptionCodeEnum.REVIEW_NOT_FOUND
     );
 
     @ExceptionHandler(GenericException.class)

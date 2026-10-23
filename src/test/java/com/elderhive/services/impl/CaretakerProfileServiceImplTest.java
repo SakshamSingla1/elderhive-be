@@ -12,6 +12,7 @@ import com.elderhive.enums.UserStatusEnum;
 import com.elderhive.enums.UserTypeEnum;
 import com.elderhive.exceptions.GenericException;
 import com.elderhive.repositories.CaretakerProfileRepository;
+import com.elderhive.repositories.ReviewRepository;
 import com.elderhive.repositories.ServiceCategoryRepository;
 import com.elderhive.repositories.UserRepository;
 import org.junit.jupiter.api.Test;
@@ -45,6 +46,9 @@ class CaretakerProfileServiceImplTest {
 
     @Mock
     private ServiceCategoryRepository serviceCategoryRepository;
+
+    @Mock
+    private ReviewRepository reviewRepository;
 
     @InjectMocks
     private CaretakerProfileServiceImpl caretakerProfileService;
@@ -195,5 +199,42 @@ class CaretakerProfileServiceImplTest {
 
         assertThat(page.getContent()).hasSize(1);
         assertThat(page.getContent().get(0).getFullName()).isEqualTo("User 1");
+    }
+
+    @Test
+    void recomputeRatingAverageRecalculatesFromRealReviewData() throws GenericException {
+        CaretakerProfile profile = CaretakerProfile.builder().id(100L).userId(1L).ratingAverage(0.0).build();
+        when(caretakerProfileRepository.findById(100L)).thenReturn(Optional.of(profile));
+        when(reviewRepository.findAverageOverallRatingByCaretakerId(100L)).thenReturn(4.25);
+        when(caretakerProfileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        caretakerProfileService.recomputeRatingAverage(100L);
+
+        assertThat(profile.getRatingAverage()).isEqualTo(4.25);
+        verify(caretakerProfileRepository).save(profile);
+    }
+
+    @Test
+    void recomputeRatingAverageWithNoReviewsYetDefaultsToZero() throws GenericException {
+        CaretakerProfile profile = CaretakerProfile.builder().id(100L).userId(1L).ratingAverage(3.0).build();
+        when(caretakerProfileRepository.findById(100L)).thenReturn(Optional.of(profile));
+        when(reviewRepository.findAverageOverallRatingByCaretakerId(100L)).thenReturn(null);
+        when(caretakerProfileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        caretakerProfileService.recomputeRatingAverage(100L);
+
+        assertThat(profile.getRatingAverage()).isEqualTo(0.0);
+    }
+
+    @Test
+    void recomputeRatingAverageThrowsNotFoundForAnUnknownCaretaker() {
+        when(caretakerProfileRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> caretakerProfileService.recomputeRatingAverage(999L))
+                .isInstanceOf(GenericException.class)
+                .extracting(ex -> ((GenericException) ex).getExceptionCode())
+                .isEqualTo(ExceptionCodeEnum.CARETAKER_PROFILE_NOT_FOUND);
+
+        verify(caretakerProfileRepository, never()).save(any());
     }
 }
