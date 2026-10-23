@@ -1,5 +1,6 @@
 package com.elderhive.config;
 
+import com.elderhive.presence.PresenceTracker;
 import com.elderhive.security.WebSocketAuthChannelInterceptor;
 import com.elderhive.security.WebSocketJwtHandshakeInterceptor;
 import lombok.RequiredArgsConstructor;
@@ -26,12 +27,16 @@ import java.util.List;
  *       (Prompt 87's EmergencyAlertServiceImpl)</li>
  *   <li>/topic/conversations/{conversationId} — new chat messages (Prompt 89's
  *       MessagingServiceImpl)</li>
+ *   <li>/topic/presence — online/offline transitions for any user (Prompt 90's
+ *       {@link PresenceTracker}, which also listens for this same session's own CONNECT/
+ *       DISCONNECT events to drive that broadcast - no extra wiring needed here beyond the
+ *       broker/endpoint registration already in place)</li>
  * </ul>
  *
  * <p>The {@code /app} application destination prefix (Prompt 89) is where a client SENDs a
  * STOMP frame the server itself handles ({@code @MessageMapping}, see
- * ChatWebSocketController) - distinct from {@code /topic}, which only the server ever
- * publishes to.
+ * ChatWebSocketController and, since Prompt 90, PresenceController's own heartbeat mapping)
+ * - distinct from {@code /topic}, which only the server ever publishes to.
  */
 @Configuration
 @EnableWebSocketMessageBroker

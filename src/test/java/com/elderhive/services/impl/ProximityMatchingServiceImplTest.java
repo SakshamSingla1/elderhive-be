@@ -5,6 +5,7 @@ import com.elderhive.dtos.MetaConfig.MetaConfigResponse;
 import com.elderhive.entities.CaretakerProfile;
 import com.elderhive.enums.ExceptionCodeEnum;
 import com.elderhive.exceptions.GenericException;
+import com.elderhive.presence.PresenceService;
 import com.elderhive.repositories.CaretakerProfileRepository;
 import com.elderhive.seed.MetaConfigSeeder;
 import com.elderhive.services.AdminConfigService;
@@ -31,7 +32,8 @@ import static org.mockito.Mockito.when;
  * verified for real against Postgres in CaretakerProfileRepositoryTest. This test covers
  * what's actually this service's own job: resolving EMERGENCY_SETTINGS' searchRadiusKm
  * default, passing it through to the repository call, computing each match's own
- * distanceKm against known coordinates, and the (currently stubbed) presence filter.
+ * distanceKm against known coordinates, and (since Prompt 90) the PresenceService-backed
+ * online filter.
  */
 @ExtendWith(MockitoExtension.class)
 class ProximityMatchingServiceImplTest {
@@ -45,6 +47,8 @@ class ProximityMatchingServiceImplTest {
     // ProximityMatchingServiceImpl's third constructor parameter.
     @Spy
     private ObjectMapper objectMapper = new ObjectMapper();
+    @Mock
+    private PresenceService presenceService;
 
     @InjectMocks
     private ProximityMatchingServiceImpl service;
@@ -81,6 +85,8 @@ class ProximityMatchingServiceImplTest {
         // must not re-sort, so deliberately return them already in that order here.
         when(caretakerProfileRepository.findVerifiedWithinRadius(anyDouble(), anyDouble(), anyDouble()))
                 .thenReturn(List.of(near, mid));
+        when(presenceService.isOnline(101L)).thenReturn(true);
+        when(presenceService.isOnline(102L)).thenReturn(true);
 
         List<CaretakerProximityMatch> matches = service.findMatchingCaretakers(0.0, 0.0);
 
@@ -92,12 +98,18 @@ class ProximityMatchingServiceImplTest {
     }
 
     @Test
-    void theOnlineStubCurrentlyPassesEveryMatchThrough() throws GenericException {
+    void onlineCaretakersAreIncludedAndOfflineOnesAreExcluded() throws GenericException {
         stubDefaultRadius(10);
         when(caretakerProfileRepository.findVerifiedWithinRadius(anyDouble(), anyDouble(), anyDouble()))
                 .thenReturn(List.of(caretaker(1L, 0.01, 0.0), caretaker(2L, 0.02, 0.0), caretaker(3L, 0.03, 0.0)));
+        // userId = 100 + id (see the caretaker() helper above).
+        when(presenceService.isOnline(101L)).thenReturn(true);
+        when(presenceService.isOnline(102L)).thenReturn(false);
+        when(presenceService.isOnline(103L)).thenReturn(true);
 
-        assertThat(service.findMatchingCaretakers(0.0, 0.0)).hasSize(3);
+        List<CaretakerProximityMatch> matches = service.findMatchingCaretakers(0.0, 0.0);
+
+        assertThat(matches).extracting(m -> m.getCaretakerProfile().getId()).containsExactly(1L, 3L);
     }
 
     @Test

@@ -18,9 +18,11 @@ import com.elderhive.repositories.CaretakerProfileRepository;
 import com.elderhive.repositories.ElderProfileRepository;
 import com.elderhive.repositories.FamilyElderLinkRepository;
 import com.elderhive.repositories.NotificationRepository;
+import com.elderhive.presence.PresenceTracker;
 import com.elderhive.repositories.RoleRepository;
 import com.elderhive.repositories.UserRepository;
 import com.elderhive.security.JwtUtil;
+import com.elderhive.security.WebSocketJwtHandshakeInterceptor;
 import com.elderhive.services.impl.NominatimGeocodingClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
@@ -28,11 +30,15 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.messaging.simp.stomp.StompCommand;
+import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
+import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.socket.messaging.SessionConnectEvent;
 
 import java.util.List;
 import java.util.Map;
@@ -95,6 +101,19 @@ class EmergencyAlertControllerIntegrationTest {
 
     @MockitoBean
     private NominatimGeocodingClient nominatimGeocodingClient;
+
+    @Autowired
+    private PresenceTracker presenceTracker;
+
+    // Prompt 90 wired ProximityMatchingServiceImpl's own isOnline() check to the real
+    // PresenceTracker (no more "assume everyone's online" stub) - a caretaker this test
+    // expects to actually match an alert now has to have a live session, same as a real
+    // connected client would via WebSocketJwtHandshakeInterceptor's own session attributes.
+    private void markOnline(Long userId) {
+        StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.CONNECT);
+        accessor.setSessionAttributes(Map.of(WebSocketJwtHandshakeInterceptor.ATTR_USER_ID, userId));
+        presenceTracker.onConnect(new SessionConnectEvent(this, MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders())));
+    }
 
     private Cookie loginCookieFor(User user) {
         String token = jwtUtil.generateAccessToken(user.getEmail(), user.getId(), user.getUserType().name());
@@ -160,6 +179,7 @@ class EmergencyAlertControllerIntegrationTest {
         // (well outside its own 10km radius).
         persistCaretaker(nearCaretakerUser.getId(), 0.01, 0.0, 5.0, CaretakerVerificationStatusEnum.VERIFIED);
         persistCaretaker(farCaretakerUser.getId(), 0.30, 0.0, 10.0, CaretakerVerificationStatusEnum.VERIFIED);
+        markOnline(nearCaretakerUser.getId());
 
         String body = objectMapper.writeValueAsString(Map.of(
                 "elderProfileId", elder.getId(), "latitude", 0.0, "longitude", 0.0));
@@ -329,6 +349,8 @@ class EmergencyAlertControllerIntegrationTest {
         User farCaretakerUser = persistUser("ea-nearby-far-caretaker@example.com", UserTypeEnum.CARETAKER);
         persistCaretaker(nearCaretakerUser.getId(), 0.01, 0.0, 10.0, CaretakerVerificationStatusEnum.VERIFIED);
         persistCaretaker(farCaretakerUser.getId(), 0.30, 0.0, 10.0, CaretakerVerificationStatusEnum.VERIFIED);
+        markOnline(nearCaretakerUser.getId());
+        markOnline(farCaretakerUser.getId());
         ElderProfile elderA = elderProfileRepository.save(ElderProfile.builder().familyUserId(familyOwner.getId()).fullName("Robert").build());
         ElderProfile elderB = elderProfileRepository.save(ElderProfile.builder().familyUserId(familyOwner.getId()).fullName("Grandma Rose").build());
 
@@ -362,6 +384,7 @@ class EmergencyAlertControllerIntegrationTest {
         User familyOwner = persistUser("ea-nearby-resolved-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
         User caretakerUser = persistUser("ea-nearby-resolved-caretaker@example.com", UserTypeEnum.CARETAKER);
         persistCaretaker(caretakerUser.getId(), 0.0, 0.0, 10.0, CaretakerVerificationStatusEnum.VERIFIED);
+        markOnline(caretakerUser.getId());
         ElderProfile elder = elderProfileRepository.save(ElderProfile.builder().familyUserId(familyOwner.getId()).fullName("Robert").build());
         Long alertId = triggerAlert(familyOwner, elder);
 

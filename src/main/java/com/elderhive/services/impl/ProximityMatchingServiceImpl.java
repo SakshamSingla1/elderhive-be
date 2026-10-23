@@ -5,6 +5,7 @@ import com.elderhive.dtos.MetaConfig.MetaConfigResponse;
 import com.elderhive.entities.CaretakerProfile;
 import com.elderhive.enums.ExceptionCodeEnum;
 import com.elderhive.exceptions.GenericException;
+import com.elderhive.presence.PresenceService;
 import com.elderhive.repositories.CaretakerProfileRepository;
 import com.elderhive.seed.MetaConfigSeeder;
 import com.elderhive.services.AdminConfigService;
@@ -24,6 +25,7 @@ public class ProximityMatchingServiceImpl implements ProximityMatchingService {
     private final CaretakerProfileRepository caretakerProfileRepository;
     private final AdminConfigService adminConfigService;
     private final ObjectMapper objectMapper;
+    private final PresenceService presenceService;
 
     private static final double EARTH_RADIUS_KM = 6371.0;
 
@@ -59,15 +61,13 @@ public class ProximityMatchingServiceImpl implements ProximityMatchingService {
         return searchRadiusKm.asDouble();
     }
 
-    /**
-     * STUB (Prompt 82) - Phase 12's PresenceTracker doesn't exist yet, so every VERIFIED,
-     * in-radius caretaker is unconditionally treated as online/reachable. MUST be rewired
-     * once Phase 12 lands (e.g. {@code presenceTracker.isOnline(caretaker.getUserId())}) -
-     * leaving this as an unconditional true past that point means the emergency fan-out
-     * keeps "matching" caretakers who aren't actually available to respond.
-     */
+    // Rewired in Prompt 90 - was an unconditional-true stub (Prompt 82) while
+    // presence.PresenceTracker didn't exist yet. A VERIFIED, in-radius caretaker who isn't
+    // actually online (no connected WebSocket session, or one gone stale past
+    // PresenceTracker's own heartbeat timeout) is excluded from the emergency fan-out rather
+    // than "matched" and never actually reachable.
     private boolean isOnline(CaretakerProfile caretaker) {
-        return true;
+        return presenceService.isOnline(caretaker.getUserId());
     }
 
     // Mirrors the repository's own native-SQL haversine computation in plain Java, purely
