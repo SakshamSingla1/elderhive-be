@@ -216,4 +216,24 @@ class CaretakerProfileRepositoryTest {
         assertThat(matches).extracting(CaretakerProfile::getId)
                 .containsExactly(near.getId(), mid.getId(), far.getId());
     }
+
+    @Test
+    void countByVerificationStatusCountsOnlyThatStatus() {
+        // Delta-based (not an absolute count) - this table is shared across every other
+        // test in the suite, same precedent AdminDashboardControllerIntegrationTest's own
+        // dashboard assertions use.
+        long baselinePending = caretakerProfileRepository.countByVerificationStatus(CaretakerVerificationStatusEnum.PENDING);
+        long baselineVerified = caretakerProfileRepository.countByVerificationStatus(CaretakerVerificationStatusEnum.VERIFIED);
+
+        caretakerProfileRepository.save(CaretakerProfile.builder()
+                .userId(persistUser("caretaker-countstatus-pending@example.com").getId())
+                .verificationStatus(CaretakerVerificationStatusEnum.PENDING).build());
+        caretakerProfileRepository.save(CaretakerProfile.builder()
+                .userId(persistUser("caretaker-countstatus-verified@example.com").getId())
+                .verificationStatus(CaretakerVerificationStatusEnum.VERIFIED).build());
+        entityManager.flush();
+
+        assertThat(caretakerProfileRepository.countByVerificationStatus(CaretakerVerificationStatusEnum.PENDING)).isEqualTo(baselinePending + 1);
+        assertThat(caretakerProfileRepository.countByVerificationStatus(CaretakerVerificationStatusEnum.VERIFIED)).isEqualTo(baselineVerified + 1);
+    }
 }

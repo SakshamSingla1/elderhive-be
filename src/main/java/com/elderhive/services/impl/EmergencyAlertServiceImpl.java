@@ -2,6 +2,7 @@ package com.elderhive.services.impl;
 
 import com.elderhive.dtos.Emergency.CaretakerProximityMatch;
 import com.elderhive.dtos.Emergency.EmergencyAlertDispatchOverrideRequest;
+import com.elderhive.dtos.Emergency.EmergencyAlertOpenCounts;
 import com.elderhive.dtos.Emergency.EmergencyAlertResponse;
 import com.elderhive.dtos.Emergency.EmergencyAlertTriggerRequest;
 import com.elderhive.dtos.MetaConfig.MetaConfigResponse;
@@ -65,6 +66,8 @@ import java.util.Set;
 public class EmergencyAlertServiceImpl implements EmergencyAlertService {
 
     private static final String UNKNOWN_LOCATION = "an unknown location";
+    private static final List<EmergencyAlertStatusEnum> OPEN_STATUSES =
+            List.of(EmergencyAlertStatusEnum.TRIGGERED, EmergencyAlertStatusEnum.ACKNOWLEDGED);
 
     private final EmergencyAlertRepository emergencyAlertRepository;
     private final ElderProfileRepository elderProfileRepository;
@@ -208,6 +211,18 @@ public class EmergencyAlertServiceImpl implements EmergencyAlertService {
         return toResponse(alert, elderProfileRepository.findById(alert.getElderProfileId()).orElse(null));
     }
 
+    @Override
+    public EmergencyAlertOpenCounts countOpenAlerts() throws GenericException {
+        List<EmergencyAlert> openAlerts = emergencyAlertRepository.findByStatusIn(OPEN_STATUSES);
+        long overdue = 0;
+        for (EmergencyAlert alert : openAlerts) {
+            if (computeIsOverdue(alert)) {
+                overdue++;
+            }
+        }
+        return EmergencyAlertOpenCounts.builder().open(openAlerts.size()).overdue(overdue).build();
+    }
+
     // Page#map's Function<T, R> signature has no checked-exception escape hatch, unlike
     // every other caller here - toResponse only ever actually throws when
     // resolveEscalationTimeoutMinutes's EMERGENCY_SETTINGS read fails to parse, which would
@@ -231,8 +246,7 @@ public class EmergencyAlertServiceImpl implements EmergencyAlertService {
         CaretakerProfile caretakerProfile = caretakerProfileRepository.findByUserId(caller.getId())
                 .orElseThrow(() -> new GenericException(ExceptionCodeEnum.CARETAKER_PROFILE_NOT_FOUND, "Caretaker profile not found"));
 
-        List<EmergencyAlert> activeAlerts = emergencyAlertRepository.findByStatusIn(
-                List.of(EmergencyAlertStatusEnum.TRIGGERED, EmergencyAlertStatusEnum.ACKNOWLEDGED));
+        List<EmergencyAlert> activeAlerts = emergencyAlertRepository.findByStatusIn(OPEN_STATUSES);
 
         List<EmergencyAlertResponse> nearby = new ArrayList<>();
         for (EmergencyAlert alert : activeAlerts) {

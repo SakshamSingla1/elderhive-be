@@ -1,6 +1,7 @@
 package com.elderhive.repositories;
 
 import com.elderhive.entities.CaretakerProfile;
+import com.elderhive.enums.CaretakerVerificationStatusEnum;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -16,6 +17,11 @@ public interface CaretakerProfileRepository extends JpaRepository<CaretakerProfi
     Optional<CaretakerProfile> findByUserId(Long userId);
 
     boolean existsByUserId(Long userId);
+
+    // Backs AdminDashboardController's own "pending caretaker verifications" stat
+    // (Prompt 94) - how many CaretakerProfiles are still awaiting an admin's
+    // approve/reject decision (CaretakerVerificationDocumentController#review).
+    long countByVerificationStatus(CaretakerVerificationStatusEnum verificationStatus);
 
     // A plain ON-clause join against User's scalar userId field (no @ManyToOne mapping
     // between these entities exists), matching ElderProfileRepository's own established

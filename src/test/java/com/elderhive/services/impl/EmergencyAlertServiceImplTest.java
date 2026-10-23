@@ -2,6 +2,7 @@ package com.elderhive.services.impl;
 
 import com.elderhive.dtos.Emergency.CaretakerProximityMatch;
 import com.elderhive.dtos.Emergency.EmergencyAlertDispatchOverrideRequest;
+import com.elderhive.dtos.Emergency.EmergencyAlertOpenCounts;
 import com.elderhive.dtos.Emergency.EmergencyAlertResponse;
 import com.elderhive.dtos.Emergency.EmergencyAlertTriggerRequest;
 import com.elderhive.dtos.MetaConfig.MetaConfigResponse;
@@ -624,5 +625,34 @@ class EmergencyAlertServiceImplTest {
                 .isInstanceOf(GenericException.class)
                 .extracting(ex -> ((GenericException) ex).getExceptionCode())
                 .isEqualTo(ExceptionCodeEnum.EMERGENCY_ALERT_NOT_FOUND);
+    }
+
+    // ==== countOpenAlerts ====
+
+    @Test
+    void countOpenAlertsCountsOnlyTriggeredAndAcknowledgedAndFlagsWhichAreOverdue() throws GenericException {
+        EmergencyAlert fresh = activeAlert(601L, 0.0, 0.0, EmergencyAlertStatusEnum.TRIGGERED);
+        fresh.setCreatedAt(LocalDateTime.now().minusMinutes(5));
+        EmergencyAlert overdue = activeAlert(602L, 0.0, 0.0, EmergencyAlertStatusEnum.ACKNOWLEDGED);
+        overdue.setCreatedAt(LocalDateTime.now().minusMinutes(20));
+        when(emergencyAlertRepository.findByStatusIn(List.of(EmergencyAlertStatusEnum.TRIGGERED, EmergencyAlertStatusEnum.ACKNOWLEDGED)))
+                .thenReturn(List.of(fresh, overdue));
+        stubEscalationTimeoutMinutes(15);
+
+        EmergencyAlertOpenCounts counts = service.countOpenAlerts();
+
+        assertThat(counts.getOpen()).isEqualTo(2);
+        assertThat(counts.getOverdue()).isEqualTo(1);
+    }
+
+    @Test
+    void countOpenAlertsReturnsZeroesWhenNothingIsOpen() throws GenericException {
+        when(emergencyAlertRepository.findByStatusIn(List.of(EmergencyAlertStatusEnum.TRIGGERED, EmergencyAlertStatusEnum.ACKNOWLEDGED)))
+                .thenReturn(List.of());
+
+        EmergencyAlertOpenCounts counts = service.countOpenAlerts();
+
+        assertThat(counts.getOpen()).isZero();
+        assertThat(counts.getOverdue()).isZero();
     }
 }

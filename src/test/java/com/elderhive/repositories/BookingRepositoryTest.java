@@ -302,6 +302,27 @@ class BookingRepositoryTest {
     }
 
     @Test
+    void countByScheduledDateBetweenIsInclusiveOnBothEndsAndIgnoresStatus() {
+        User family = persistUser("booking-countweek-family@example.com", UserTypeEnum.FAMILY_MEMBER);
+        User caretakerUser = persistUser("booking-countweek-caretaker@example.com", UserTypeEnum.CARETAKER);
+        ElderProfile elder = persistElderProfile(family.getId());
+        CaretakerProfile caretaker = persistCaretakerProfile(caretakerUser.getId());
+        ServiceOffering offering = persistServiceOffering("booking-countweek");
+        LocalDate start = LocalDate.of(2026, 4, 6);
+        LocalDate end = LocalDate.of(2026, 4, 12);
+
+        bookingRepository.save(newBooking(family.getId(), elder.getId(), caretaker.getId(), offering.getId())
+                .scheduledDate(start).build()); // on the start boundary
+        bookingRepository.save(newBooking(family.getId(), elder.getId(), caretaker.getId(), offering.getId())
+                .scheduledDate(end).status(BookingStatusEnum.CANCELLED).build()); // on the end boundary, status ignored
+        bookingRepository.save(newBooking(family.getId(), elder.getId(), caretaker.getId(), offering.getId())
+                .scheduledDate(end.plusDays(1)).build()); // just outside the range
+        entityManager.flush();
+
+        assertThat(bookingRepository.countByScheduledDateBetween(start, end)).isEqualTo(2);
+    }
+
+    @Test
     void savingABookingWithAnUnknownServiceOfferingFailsTheForeignKey() {
         User family = persistUser("booking-badoffering-family@example.com", UserTypeEnum.FAMILY_MEMBER);
         User caretakerUser = persistUser("booking-badoffering-caretaker@example.com", UserTypeEnum.CARETAKER);

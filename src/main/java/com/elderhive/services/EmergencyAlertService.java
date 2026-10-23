@@ -1,6 +1,7 @@
 package com.elderhive.services;
 
 import com.elderhive.dtos.Emergency.EmergencyAlertDispatchOverrideRequest;
+import com.elderhive.dtos.Emergency.EmergencyAlertOpenCounts;
 import com.elderhive.dtos.Emergency.EmergencyAlertResponse;
 import com.elderhive.dtos.Emergency.EmergencyAlertTriggerRequest;
 import com.elderhive.entities.User;
@@ -67,4 +68,10 @@ public interface EmergencyAlertService {
      *  the controller. No non-admin caller needs this (everyone else reaches an alert
      *  through trigger/claim/resolve/nearby's own responses instead). */
     EmergencyAlertResponse getById(Long id) throws GenericException;
+
+    /** Prompt 94's admin dashboard stat: every non-RESOLVED alert system-wide, and how
+     *  many of those are currently overdue - reuses this service's own isOverdue rule
+     *  (EMERGENCY_SETTINGS.escalationTimeoutMinutes) rather than a second implementation
+     *  of it living in AdminDashboardService. */
+    EmergencyAlertOpenCounts countOpenAlerts() throws GenericException;
 }

@@ -47,4 +47,10 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
             Long caretakerId, LocalDate scheduledDate, List<BookingStatusEnum> statuses);
 
     List<Booking> findByRecurringGroupIdOrderByScheduledDateAsc(String recurringGroupId);
+
+    // Backs AdminDashboardController's own "bookings this week" stat (Prompt 94) - every
+    // booking scheduled in the given date range regardless of status (a cancelled booking
+    // still represents scheduling volume for that week), inclusive on both ends (Spring
+    // Data's Between always is).
+    long countByScheduledDateBetween(LocalDate start, LocalDate end);
 }
