@@ -10,6 +10,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -95,5 +97,33 @@ class UserAndUserRoleMappingTest {
                     .userId(user.getId()).userType(UserTypeEnum.CARETAKER).isPrimary(false).build());
             userRoleMappingRepository.flush();
         }).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    // Backs AdminUserController's grant/revoke (Prompt 93).
+    @Test
+    void existsByUserIdAndUserTypeAndFindByUserIdAndUserTypeOnlyMatchTheExactCombination() {
+        User user = persistUser("exists-by-combo@example.com", UserTypeEnum.FAMILY_MEMBER);
+        userRoleMappingRepository.save(UserRoleMapping.builder()
+                .userId(user.getId()).userType(UserTypeEnum.FAMILY_MEMBER).isPrimary(true).build());
+
+        assertThat(userRoleMappingRepository.existsByUserIdAndUserType(user.getId(), UserTypeEnum.FAMILY_MEMBER)).isTrue();
+        assertThat(userRoleMappingRepository.existsByUserIdAndUserType(user.getId(), UserTypeEnum.CARETAKER)).isFalse();
+        assertThat(userRoleMappingRepository.findByUserIdAndUserType(user.getId(), UserTypeEnum.FAMILY_MEMBER)).isPresent();
+        assertThat(userRoleMappingRepository.findByUserIdAndUserType(user.getId(), UserTypeEnum.CARETAKER)).isEmpty();
+    }
+
+    // Backs AdminUserController's listUsers response batching (Prompt 93).
+    @Test
+    void findByUserIdInReturnsMappingsForEveryRequestedUserInOneQuery() {
+        User a = persistUser("batch-roles-a@example.com", UserTypeEnum.FAMILY_MEMBER);
+        User b = persistUser("batch-roles-b@example.com", UserTypeEnum.CARETAKER);
+        User c = persistUser("batch-roles-c@example.com", UserTypeEnum.ELDER);
+        userRoleMappingRepository.save(UserRoleMapping.builder().userId(a.getId()).userType(UserTypeEnum.FAMILY_MEMBER).isPrimary(true).build());
+        userRoleMappingRepository.save(UserRoleMapping.builder().userId(b.getId()).userType(UserTypeEnum.CARETAKER).isPrimary(true).build());
+        userRoleMappingRepository.save(UserRoleMapping.builder().userId(c.getId()).userType(UserTypeEnum.ELDER).isPrimary(true).build());
+
+        assertThat(userRoleMappingRepository.findByUserIdIn(List.of(a.getId(), b.getId())))
+                .extracting(UserRoleMapping::getUserId)
+                .containsExactlyInAnyOrder(a.getId(), b.getId());
     }
 }

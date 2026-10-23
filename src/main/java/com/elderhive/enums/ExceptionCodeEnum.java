@@ -41,6 +41,20 @@ public enum ExceptionCodeEnum {
     USER_NOT_FOUND("USER_NOT_FOUND"),
     DUPLICATE_EMAIL("DUPLICATE_EMAIL"),
     INVALID_ROLE("INVALID_ROLE"),
+    // Prompt 93's admin role grant: the target user already holds this UserTypeEnum role
+    // (a duplicate UserRoleMapping row would violate its own unique (user_id, user_type)
+    // constraint - see UserAndUserRoleMappingTest).
+    USER_ROLE_ALREADY_ASSIGNED("USER_ROLE_ALREADY_ASSIGNED"),
+    // Prompt 93's admin role revoke: the target user does not currently hold this
+    // UserTypeEnum role.
+    USER_ROLE_NOT_ASSIGNED("USER_ROLE_NOT_ASSIGNED"),
+    // Prompt 93's admin role revoke: revoking a user's PRIMARY role would leave
+    // User.userType pointing at a role they no longer hold via UserRoleMapping. ElderHive
+    // has no "switch default role" feature to pair with this (unlike ElderSphere), so a
+    // primary role can only ever be replaced by a future prompt that adds one - for now,
+    // revoking it outright is rejected. This also covers "last remaining role" (a user's
+    // sole role is always their primary one), so no separate check is needed for that case.
+    PRIMARY_USER_ROLE_CANNOT_BE_REVOKED("PRIMARY_USER_ROLE_CANNOT_BE_REVOKED"),
 
     // ==== VALIDATION / INPUT ====
     BAD_REQUEST("BAD_REQUEST"),
