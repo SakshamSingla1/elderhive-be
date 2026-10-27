@@ -143,7 +143,15 @@ public enum ExceptionCodeEnum {
     // Stripe-Signature header didn't verify against stripe.webhook-secret - either a
     // misconfigured secret or (far more likely in practice) a request that didn't
     // actually come from Stripe.
-    WEBHOOK_SIGNATURE_INVALID("WEBHOOK_SIGNATURE_INVALID");
+    WEBHOOK_SIGNATURE_INVALID("WEBHOOK_SIGNATURE_INVALID"),
+
+    // ==== LANDING PAGE CMS ====
+    LANDING_FEATURE_NOT_FOUND("LANDING_FEATURE_NOT_FOUND"),
+    LANDING_FAQ_NOT_FOUND("LANDING_FAQ_NOT_FOUND"),
+    LANDING_TESTIMONIAL_NOT_FOUND("LANDING_TESTIMONIAL_NOT_FOUND"),
+
+    // ==== CONTACT US ====
+    CONTACT_US_NOT_FOUND("CONTACT_US_NOT_FOUND");
 
     private final String value;
 

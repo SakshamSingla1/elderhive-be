@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.access.expression.method.DefaultMethodSecurityExpressionHandler;
 import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
 import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
@@ -105,6 +106,14 @@ public class SecurityConfig {
                                 "/swagger-ui.html",
                                 "/v3/api-docs/**"
                         ).permitAll()
+                        // The public marketing homepage (Prompt 99) and its contact form -
+                        // reachable by an anonymous visitor who hasn't logged in at all.
+                        // Every other /landing/** and /contact-us/** route (the admin CMS
+                        // editor, the triage queue) stays behind the default
+                        // .anyRequest().authenticated() below, gated further by its own
+                        // @PreAuthorize.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/landing/page").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/contact-us").permitAll()
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())

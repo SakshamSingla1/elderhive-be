@@ -59,7 +59,9 @@ public class AdminBootstrapSeeder implements CommandLineRunner {
             new PermissionDef("BOOKING_MANAGE", "View and manage bookings across all users"),
             new PermissionDef("CARETAKER_VERIFY", "Review and verify caretaker profile applications"),
             new PermissionDef("EMERGENCY_DISPATCH", "View and act on emergency SOS dispatches"),
-            new PermissionDef("DASHBOARD_VIEW", "View the admin stats dashboard")
+            new PermissionDef("DASHBOARD_VIEW", "View the admin stats dashboard"),
+            new PermissionDef("LANDING_MANAGE", "Edit the public landing page's hero/CTA copy, features, FAQs, and testimonials"),
+            new PermissionDef("CONTACT_US_MANAGE", "View and triage public contact form submissions")
     );
 
     private static final String SUPER_ADMIN_ROLE_NAME = "Super Admin";

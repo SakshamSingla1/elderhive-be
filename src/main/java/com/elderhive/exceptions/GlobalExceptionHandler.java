@@ -85,7 +85,11 @@ public class GlobalExceptionHandler {
             ExceptionCodeEnum.REVIEW_NOT_FOUND,
             ExceptionCodeEnum.CONVERSATION_NOT_FOUND,
             ExceptionCodeEnum.USER_ROLE_NOT_ASSIGNED,
-            ExceptionCodeEnum.PAYMENT_NOT_FOUND
+            ExceptionCodeEnum.PAYMENT_NOT_FOUND,
+            ExceptionCodeEnum.LANDING_FEATURE_NOT_FOUND,
+            ExceptionCodeEnum.LANDING_FAQ_NOT_FOUND,
+            ExceptionCodeEnum.LANDING_TESTIMONIAL_NOT_FOUND,
+            ExceptionCodeEnum.CONTACT_US_NOT_FOUND
     );
 
     @ExceptionHandler(GenericException.class)
