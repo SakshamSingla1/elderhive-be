@@ -153,6 +153,13 @@
 			<artifactId>cloudinary-http44</artifactId>
 			<version>1.39.0</version>
 		</dependency>
+		<!-- Payments (Stripe) - see com.elderhive.config.StripeConfig and PaymentServiceImpl.
+			 Version mirrors ~/ElderSphere/eldersphere-be's pom.xml exactly. -->
+		<dependency>
+			<groupId>com.stripe</groupId>
+			<artifactId>stripe-java</artifactId>
+			<version>29.2.0</version>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-test</artifactId>

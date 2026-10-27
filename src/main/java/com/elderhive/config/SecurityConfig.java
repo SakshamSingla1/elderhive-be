@@ -96,6 +96,11 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/auth/**",
+                                // Stripe calls this directly with no JWT (Prompt 97) -
+                                // PaymentServiceImpl#handleWebhook verifies the
+                                // Stripe-Signature header against stripe.webhook-secret
+                                // instead, which IS this route's actual auth.
+                                "/api/v1/payments/webhook",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
                                 "/v3/api-docs/**"

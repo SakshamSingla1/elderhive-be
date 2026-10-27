@@ -109,6 +109,18 @@ cloudinary:
   api-key: ${CLOUDINARY_API_KEY:}
   api-secret: ${CLOUDINARY_API_SECRET:}
 
+# Blank by default -> StripeConfig#isConfigured() is false and every payment endpoint
+# fails fast with PAYMENT_GATEWAY_NOT_CONFIGURED - safe for local dev with zero setup.
+# Payments are additive (Prompt 97): booking creation/management (Phase 10) works fully
+# without any of this ever being set. Get test keys at
+# https://dashboard.stripe.com/test/apikeys; the webhook secret comes from either the
+# Stripe CLI (`stripe listen`) for local dev or the dashboard's webhook endpoint config
+# for a real deployment.
+stripe:
+  secret-key: ${STRIPE_SECRET_KEY:}
+  publishable-key: ${STRIPE_PUBLISHABLE_KEY:}
+  webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+
 jwt:
   # dev-only fallback so the app boots with zero setup locally - every other environment MUST
   # set a real JWT_SECRET; never rely on this default outside local dev.

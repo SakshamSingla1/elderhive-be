@@ -129,7 +129,21 @@ public enum ExceptionCodeEnum {
     DUPLICATE_REVIEW("DUPLICATE_REVIEW"),
 
     // ==== MESSAGING ====
-    CONVERSATION_NOT_FOUND("CONVERSATION_NOT_FOUND");
+    CONVERSATION_NOT_FOUND("CONVERSATION_NOT_FOUND"),
+
+    // ==== PAYMENT ====
+    PAYMENT_NOT_FOUND("PAYMENT_NOT_FOUND"),
+    // The booking isn't in a state that can be paid for (createIntent() requires
+    // CONFIRMED) - payments are additive (Prompt 97), this never blocks the booking
+    // lifecycle itself, it just rejects paying for one too early/late.
+    BOOKING_NOT_PAYABLE("BOOKING_NOT_PAYABLE"),
+    // StripeConfig#isConfigured()/isWebhookConfigured() is false - no STRIPE_SECRET_KEY/
+    // STRIPE_WEBHOOK_SECRET set on this server.
+    PAYMENT_GATEWAY_NOT_CONFIGURED("PAYMENT_GATEWAY_NOT_CONFIGURED"),
+    // Stripe-Signature header didn't verify against stripe.webhook-secret - either a
+    // misconfigured secret or (far more likely in practice) a request that didn't
+    // actually come from Stripe.
+    WEBHOOK_SIGNATURE_INVALID("WEBHOOK_SIGNATURE_INVALID");
 
     private final String value;
 

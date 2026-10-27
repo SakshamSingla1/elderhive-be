@@ -50,7 +50,9 @@ public class GlobalExceptionHandler {
             ExceptionCodeEnum.INVALID_ROLE,
             ExceptionCodeEnum.FILE_TYPE_NOT_ALLOWED,
             ExceptionCodeEnum.INVALID_BOOKING_STATUS_TRANSITION,
-            ExceptionCodeEnum.INVALID_EMERGENCY_ALERT_STATUS_TRANSITION
+            ExceptionCodeEnum.INVALID_EMERGENCY_ALERT_STATUS_TRANSITION,
+            ExceptionCodeEnum.BOOKING_NOT_PAYABLE,
+            ExceptionCodeEnum.WEBHOOK_SIGNATURE_INVALID
     );
 
     private static final Set<ExceptionCodeEnum> CONFLICT_CODES = Set.of(
@@ -82,7 +84,8 @@ public class GlobalExceptionHandler {
             ExceptionCodeEnum.EMERGENCY_ALERT_NOT_FOUND,
             ExceptionCodeEnum.REVIEW_NOT_FOUND,
             ExceptionCodeEnum.CONVERSATION_NOT_FOUND,
-            ExceptionCodeEnum.USER_ROLE_NOT_ASSIGNED
+            ExceptionCodeEnum.USER_ROLE_NOT_ASSIGNED,
+            ExceptionCodeEnum.PAYMENT_NOT_FOUND
     );
 
     @ExceptionHandler(GenericException.class)
@@ -213,6 +216,9 @@ public class GlobalExceptionHandler {
         if (code == null) return HttpStatus.INTERNAL_SERVER_ERROR;
         if (UNAUTHORIZED_CODES.contains(code)) return HttpStatus.UNAUTHORIZED;
         if (code == ExceptionCodeEnum.FORBIDDEN) return HttpStatus.FORBIDDEN;
+        // A server configuration gap (no Stripe keys set), not a client mistake - 503
+        // rather than folding it into BAD_REQUEST_CODES' 400.
+        if (code == ExceptionCodeEnum.PAYMENT_GATEWAY_NOT_CONFIGURED) return HttpStatus.SERVICE_UNAVAILABLE;
         if (NOT_FOUND_CODES.contains(code)) return HttpStatus.NOT_FOUND;
         if (BAD_REQUEST_CODES.contains(code)) return HttpStatus.BAD_REQUEST;
         if (CONFLICT_CODES.contains(code)) return HttpStatus.CONFLICT;
