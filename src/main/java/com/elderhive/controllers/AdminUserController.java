@@ -1,6 +1,7 @@
 package com.elderhive.controllers;
 
 import com.elderhive.dtos.User.AdminUserResponse;
+import com.elderhive.dtos.User.AssignFineGrainedRoleRequest;
 import com.elderhive.dtos.User.GrantUserRoleRequest;
 import com.elderhive.entities.User;
 import com.elderhive.enums.ExceptionCodeEnum;
@@ -78,6 +79,22 @@ public class AdminUserController {
     public ResponseEntity<ResponseModel<AdminUserResponse>> revokeRole(
             @PathVariable Long id, @PathVariable UserTypeEnum roleType) throws GenericException {
         return ApiResponse.successResponse(adminUserService.revokeRole(id, roleType, currentUser()), "Role revoked successfully");
+    }
+
+    /**
+     * Sets (or clears, with a null roleId) the fine-grained Role an ADMIN account holds.
+     * Gated by ROLE_MANAGE rather than USER_MANAGE - same reasoning as RoleController's own
+     * endpoints (ROLE_MANAGE is deliberately kept out of the curated "Admin" role, so this
+     * is Super-Admin-only in practice despite not being a bare hasRole('SUPER_ADMIN')
+     * check). Without this endpoint, AdminBootstrapSeeder's ADMIN_BOOTSTRAP_EMAIL account
+     * is the only ADMIN that can ever hold a fine-grained role.
+     */
+    @PreAuthorize("hasRole('ADMIN') and @adminPermissionGuard.has('ROLE_MANAGE')")
+    @PutMapping("/{id}/role")
+    public ResponseEntity<ResponseModel<AdminUserResponse>> assignFineGrainedRole(
+            @PathVariable Long id, @RequestBody AssignFineGrainedRoleRequest request) throws GenericException {
+        return ApiResponse.successResponse(
+                adminUserService.assignFineGrainedRole(id, request.getRoleId(), currentUser()), "Role assigned successfully");
     }
 
     private User currentUser() throws GenericException {

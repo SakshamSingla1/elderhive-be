@@ -5,6 +5,7 @@ import com.elderhive.dtos.File.FileAssetResponse;
 import com.elderhive.entities.CaretakerProfile;
 import com.elderhive.entities.CaretakerVerificationDocument;
 import com.elderhive.entities.User;
+import com.elderhive.enums.CaretakerVerificationStatusEnum;
 import com.elderhive.enums.DocumentReviewStatusEnum;
 import com.elderhive.enums.ExceptionCodeEnum;
 import com.elderhive.enums.UserTypeEnum;
@@ -86,6 +87,21 @@ public class CaretakerVerificationDocumentServiceImpl implements CaretakerVerifi
                         "Verification document not found"));
         document.setReviewStatus(reviewStatus);
         document = documentRepository.save(document);
+
+        // A reviewed document is this caretaker's one and only verification artifact today
+        // (no "required document set" concept exists yet) - its review outcome IS the
+        // profile's verification outcome. Without this, findVerifiedWithinRadius's
+        // verification_status = 'VERIFIED' filter can never match any caretaker, since
+        // nothing else in the codebase ever moves CaretakerProfile off its PENDING default.
+        CaretakerProfile profile = caretakerProfileRepository.findById(document.getCaretakerId())
+                .orElseThrow(() -> new GenericException(ExceptionCodeEnum.CARETAKER_PROFILE_NOT_FOUND, "Caretaker profile not found"));
+        profile.setVerificationStatus(switch (reviewStatus) {
+            case APPROVED -> CaretakerVerificationStatusEnum.VERIFIED;
+            case REJECTED -> CaretakerVerificationStatusEnum.REJECTED;
+            case PENDING -> CaretakerVerificationStatusEnum.PENDING;
+        });
+        caretakerProfileRepository.save(profile);
+
         return toResponse(document, fileAssetService.getById(document.getFileAssetId()));
     }
 

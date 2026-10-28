@@ -113,6 +113,29 @@ class ProximityMatchingServiceImplTest {
     }
 
     @Test
+    void returnsAnEmptyListRatherThanThrowingWhenEveryInRadiusCaretakerIsOffline() throws GenericException {
+        stubDefaultRadius(10);
+        when(caretakerProfileRepository.findVerifiedWithinRadius(anyDouble(), anyDouble(), anyDouble()))
+                .thenReturn(List.of(caretaker(1L, 0.01, 0.0), caretaker(2L, 0.02, 0.0)));
+        when(presenceService.isOnline(101L)).thenReturn(false);
+        when(presenceService.isOnline(102L)).thenReturn(false);
+
+        List<CaretakerProximityMatch> matches = service.findMatchingCaretakers(0.0, 0.0);
+
+        assertThat(matches).isEmpty();
+    }
+
+    @Test
+    void returnsAnEmptyListRatherThanThrowingWhenNoCaretakerIsWithinRadiusAtAll() throws GenericException {
+        stubDefaultRadius(10);
+        when(caretakerProfileRepository.findVerifiedWithinRadius(anyDouble(), anyDouble(), anyDouble())).thenReturn(List.of());
+
+        List<CaretakerProximityMatch> matches = service.findMatchingCaretakers(0.0, 0.0);
+
+        assertThat(matches).isEmpty();
+    }
+
+    @Test
     void missingSearchRadiusKmInTheConfigThrowsRatherThanGuessingADefault() throws GenericException {
         when(adminConfigService.getConfig(MetaConfigSeeder.EMERGENCY_SETTINGS_CONTEXT))
                 .thenReturn(MetaConfigResponse.builder().context("EMERGENCY_SETTINGS")

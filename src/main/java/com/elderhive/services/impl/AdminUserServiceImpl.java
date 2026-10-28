@@ -9,6 +9,7 @@ import com.elderhive.enums.ExceptionCodeEnum;
 import com.elderhive.enums.UserStatusEnum;
 import com.elderhive.enums.UserTypeEnum;
 import com.elderhive.exceptions.GenericException;
+import com.elderhive.repositories.RoleRepository;
 import com.elderhive.repositories.UserRepository;
 import com.elderhive.repositories.UserRoleMappingRepository;
 import com.elderhive.services.AdminUserService;
@@ -39,6 +40,7 @@ public class AdminUserServiceImpl implements AdminUserService {
 
     private final UserRepository userRepository;
     private final UserRoleMappingRepository userRoleMappingRepository;
+    private final RoleRepository roleRepository;
     private final AuditLogService auditLogService;
     private final ObjectMapper objectMapper;
 
@@ -117,6 +119,23 @@ public class AdminUserServiceImpl implements AdminUserService {
         return toResponse(target);
     }
 
+    @Override
+    @Transactional
+    public AdminUserResponse assignFineGrainedRole(Long targetUserId, Long roleId, User caller) throws GenericException {
+        User target = findOrThrow(targetUserId);
+        if (roleId != null && !roleRepository.existsById(roleId)) {
+            throw new GenericException(ExceptionCodeEnum.DATA_NOT_FOUND, "Role not found");
+        }
+
+        target.setRoleId(roleId);
+        target = userRepository.save(target);
+
+        auditLogService.record(EntityTypeEnum.USER, targetUserId.toString(), ActionType.GRANT, caller.getId(),
+                toJson(Map.of("roleId", String.valueOf(roleId))));
+
+        return toResponse(target);
+    }
+
     private void requireSuperAdmin(User caller) throws GenericException {
         if (caller.getUserType() != UserTypeEnum.SUPER_ADMIN) {
             throw new GenericException(ExceptionCodeEnum.FORBIDDEN,
@@ -146,6 +165,7 @@ public class AdminUserServiceImpl implements AdminUserService {
                 .primaryRole(user.getUserType())
                 .status(user.getStatus())
                 .roles(roles)
+                .roleId(user.getRoleId())
                 .createdAt(user.getCreatedAt())
                 .build();
     }

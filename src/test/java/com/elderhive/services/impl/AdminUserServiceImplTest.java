@@ -9,6 +9,7 @@ import com.elderhive.enums.ExceptionCodeEnum;
 import com.elderhive.enums.UserStatusEnum;
 import com.elderhive.enums.UserTypeEnum;
 import com.elderhive.exceptions.GenericException;
+import com.elderhive.repositories.RoleRepository;
 import com.elderhive.repositories.UserRepository;
 import com.elderhive.repositories.UserRoleMappingRepository;
 import com.elderhive.services.AuditLogService;
@@ -45,6 +46,8 @@ class AdminUserServiceImplTest {
     private UserRepository userRepository;
     @Mock
     private UserRoleMappingRepository userRoleMappingRepository;
+    @Mock
+    private RoleRepository roleRepository;
     @Mock
     private AuditLogService auditLogService;
     @Spy
@@ -233,5 +236,55 @@ class AdminUserServiceImplTest {
                 .isInstanceOf(GenericException.class)
                 .extracting("exceptionCode").isEqualTo(ExceptionCodeEnum.FORBIDDEN);
         verify(userRoleMappingRepository, never()).delete(any());
+    }
+
+    @Test
+    void assignFineGrainedRoleSetsTheTargetsRoleIdAndAudits() throws GenericException {
+        User target = user(16L, UserTypeEnum.ADMIN);
+        when(userRepository.findById(16L)).thenReturn(Optional.of(target));
+        when(roleRepository.existsById(3L)).thenReturn(true);
+        when(userRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(userRoleMappingRepository.findByUserId(16L)).thenReturn(List.of());
+
+        AdminUserResponse response = adminUserService.assignFineGrainedRole(16L, 3L, superAdminCaller());
+
+        assertThat(target.getRoleId()).isEqualTo(3L);
+        assertThat(response.getRoleId()).isEqualTo(3L);
+        verify(auditLogService).record(eq(EntityTypeEnum.USER), eq("16"), eq(ActionType.GRANT), eq(superAdminCaller().getId()), anyString());
+    }
+
+    @Test
+    void assignFineGrainedRoleWithANullRoleIdClearsItBackToFailClosed() throws GenericException {
+        User target = user(17L, UserTypeEnum.ADMIN);
+        target.setRoleId(3L);
+        when(userRepository.findById(17L)).thenReturn(Optional.of(target));
+        when(userRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(userRoleMappingRepository.findByUserId(17L)).thenReturn(List.of());
+
+        adminUserService.assignFineGrainedRole(17L, null, superAdminCaller());
+
+        assertThat(target.getRoleId()).isNull();
+        verify(roleRepository, never()).existsById(any());
+    }
+
+    @Test
+    void assignFineGrainedRoleRejectsARoleIdThatDoesNotExist() {
+        User target = user(18L, UserTypeEnum.ADMIN);
+        when(userRepository.findById(18L)).thenReturn(Optional.of(target));
+        when(roleRepository.existsById(999L)).thenReturn(false);
+
+        assertThatThrownBy(() -> adminUserService.assignFineGrainedRole(18L, 999L, superAdminCaller()))
+                .isInstanceOf(GenericException.class)
+                .extracting("exceptionCode").isEqualTo(ExceptionCodeEnum.DATA_NOT_FOUND);
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void assignFineGrainedRoleThrowsWhenTargetDoesNotExist() {
+        when(userRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> adminUserService.assignFineGrainedRole(99L, 3L, superAdminCaller()))
+                .isInstanceOf(GenericException.class)
+                .extracting("exceptionCode").isEqualTo(ExceptionCodeEnum.USER_NOT_FOUND);
     }
 }

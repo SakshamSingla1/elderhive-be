@@ -196,4 +196,53 @@ class AdminUserControllerIntegrationTest {
                 .andExpect(status().isOk());
         assertThat(userRoleMappingRepository.existsByUserIdAndUserType(target.getId(), UserTypeEnum.ADMIN)).isFalse();
     }
+
+    @Test
+    void aSuperAdminCanAssignAndThenClearAFineGrainedRoleOnAPlainAdmin() throws Exception {
+        User superAdmin = persistSuperAdmin("adminusers-assignrole-superadmin@example.com");
+        User target = persistUser("adminusers-assignrole-target@example.com", UserTypeEnum.ADMIN);
+        Role adminRole = roleRepository.findByName("Admin").orElseThrow();
+
+        MvcResult assignResult = mockMvc.perform(put("/api/v1/admin/users/" + target.getId() + "/role").cookie(loginCookieFor(superAdmin))
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsString(Map.of("roleId", adminRole.getId()))))
+                .andExpect(status().isOk())
+                .andReturn();
+        var assignedData = objectMapper.readTree(assignResult.getResponse().getContentAsString()).get("data");
+        assertThat(assignedData.get("roleId").asLong()).isEqualTo(adminRole.getId());
+        assertThat(userRepository.findById(target.getId()).orElseThrow().getRoleId()).isEqualTo(adminRole.getId());
+
+        MvcResult clearResult = mockMvc.perform(put("/api/v1/admin/users/" + target.getId() + "/role").cookie(loginCookieFor(superAdmin))
+                        .contentType("application/json")
+                        .content("{\"roleId\":null}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        var clearedData = objectMapper.readTree(clearResult.getResponse().getContentAsString()).get("data");
+        assertThat(clearedData.get("roleId").isNull()).isTrue();
+        assertThat(userRepository.findById(target.getId()).orElseThrow().getRoleId()).isNull();
+    }
+
+    @Test
+    void aPlainAdminCannotAssignFineGrainedRolesEvenWithUserManage() throws Exception {
+        User admin = persistAdminWithUserManage("adminusers-assignrole-plainadmin@example.com");
+        User target = persistUser("adminusers-assignrole-forbidden-target@example.com", UserTypeEnum.ADMIN);
+        Role adminRole = roleRepository.findByName("Admin").orElseThrow();
+
+        mockMvc.perform(put("/api/v1/admin/users/" + target.getId() + "/role").cookie(loginCookieFor(admin))
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsString(Map.of("roleId", adminRole.getId()))))
+                .andExpect(status().isForbidden());
+        assertThat(userRepository.findById(target.getId()).orElseThrow().getRoleId()).isNull();
+    }
+
+    @Test
+    void assigningANonexistentRoleIdReturnsNotFound() throws Exception {
+        User superAdmin = persistSuperAdmin("adminusers-assignrole-badid-superadmin@example.com");
+        User target = persistUser("adminusers-assignrole-badid-target@example.com", UserTypeEnum.ADMIN);
+
+        mockMvc.perform(put("/api/v1/admin/users/" + target.getId() + "/role").cookie(loginCookieFor(superAdmin))
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsString(Map.of("roleId", 999_999_999L))))
+                .andExpect(status().isNotFound());
+    }
 }

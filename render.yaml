@@ -1,0 +1,68 @@
+services:
+  - type: web
+    name: elderhive-be
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    region: oregon
+    healthCheckPath: /actuator/health
+    envVars:
+      # A managed Render Postgres instance (or any external Postgres, e.g. Supabase) -
+      # these have no default and must be set manually after provisioning the database.
+      # sync: false keeps the actual values out of this committed file.
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_USER
+        sync: false
+      - key: DATABASE_PASSWORD
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      # The deployed frontend's real origin (CORS allow-list, SecurityConfig). sync: false
+      # so dashboard edits survive future git-triggered blueprint syncs.
+      - key: APP_FRONTEND_URL
+        sync: false
+      # This service's own public Render URL, e.g. https://elderhive-be.onrender.com.
+      - key: APP_URL
+        sync: false
+      # MUST be true - Render serves over HTTPS, and a Secure cookie is never sent back by
+      # the browser over plain HTTP (see application.yml's own comment on this property).
+      - key: COOKIE_SECURE
+        value: "true"
+      # The email of an existing ADMIN account to grant "Super Admin" to on next boot - the
+      # only way to create the first fine-grained admin (AdminBootstrapSeeder). Set once,
+      # safe to leave set permanently (never reassigns a role once one already exists).
+      - key: ADMIN_BOOTSTRAP_EMAIL
+        sync: false
+      # --- Everything below is optional - every one of these degrades gracefully to a
+      # documented fallback (simulated email, local-disk file storage,
+      # PAYMENT_GATEWAY_NOT_CONFIGURED, an ephemeral VAPID key pair) when left unset. Set
+      # them only once you actually want that integration live. See
+      # elderhive-be/.env.example for what each one does. ---
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_FROM_ADDRESS
+        sync: false
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: GEOCODING_CONTACT_EMAIL
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PUBLISHABLE_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false

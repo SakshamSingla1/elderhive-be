@@ -27,4 +27,13 @@ public interface AdminUserService {
     AdminUserResponse grantRole(Long targetUserId, UserTypeEnum roleType, User caller) throws GenericException;
 
     AdminUserResponse revokeRole(Long targetUserId, UserTypeEnum roleType, User caller) throws GenericException;
+
+    /**
+     * Sets (or, when {@code roleId} is null, clears) {@code User.roleId} - the fine-grained
+     * Role/Permission assignment consulted only for an ADMIN caller (see
+     * AdminPermissionGuard). This is the only way, other than AdminBootstrapSeeder's own
+     * one-time bootstrap-email wiring, to give any ADMIN account besides that one a
+     * fine-grained role at all.
+     */
+    AdminUserResponse assignFineGrainedRole(Long targetUserId, Long roleId, User caller) throws GenericException;
 }

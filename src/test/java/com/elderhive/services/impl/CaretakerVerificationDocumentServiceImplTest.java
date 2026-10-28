@@ -143,11 +143,45 @@ class CaretakerVerificationDocumentServiceImplTest {
                 .id(1L).caretakerId(100L).fileAssetId(500L).docType("ID_PROOF").reviewStatus(DocumentReviewStatusEnum.PENDING).build();
         when(documentRepository.findById(1L)).thenReturn(Optional.of(doc));
         when(documentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(caretakerProfileRepository.findById(100L)).thenReturn(Optional.of(profile(100L, 10L)));
+        when(caretakerProfileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(fileAssetService.getById(500L)).thenReturn(FileAssetResponse.builder().id(500L).url("http://x/file.pdf").build());
 
         CaretakerVerificationDocumentResponse response = service.review(1L, DocumentReviewStatusEnum.APPROVED);
 
         assertThat(response.getReviewStatus()).isEqualTo(DocumentReviewStatusEnum.APPROVED);
+    }
+
+    @Test
+    void approvingADocumentMarksTheOwningCaretakerProfileAsVerified() throws GenericException {
+        CaretakerVerificationDocument doc = CaretakerVerificationDocument.builder()
+                .id(1L).caretakerId(100L).fileAssetId(500L).docType("ID_PROOF").reviewStatus(DocumentReviewStatusEnum.PENDING).build();
+        CaretakerProfile profile = profile(100L, 10L);
+        when(documentRepository.findById(1L)).thenReturn(Optional.of(doc));
+        when(documentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(caretakerProfileRepository.findById(100L)).thenReturn(Optional.of(profile));
+        when(caretakerProfileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(fileAssetService.getById(500L)).thenReturn(FileAssetResponse.builder().id(500L).url("http://x/file.pdf").build());
+
+        service.review(1L, DocumentReviewStatusEnum.APPROVED);
+
+        assertThat(profile.getVerificationStatus()).isEqualTo(CaretakerVerificationStatusEnum.VERIFIED);
+    }
+
+    @Test
+    void rejectingADocumentMarksTheOwningCaretakerProfileAsRejected() throws GenericException {
+        CaretakerVerificationDocument doc = CaretakerVerificationDocument.builder()
+                .id(1L).caretakerId(100L).fileAssetId(500L).docType("ID_PROOF").reviewStatus(DocumentReviewStatusEnum.PENDING).build();
+        CaretakerProfile profile = profile(100L, 10L);
+        when(documentRepository.findById(1L)).thenReturn(Optional.of(doc));
+        when(documentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(caretakerProfileRepository.findById(100L)).thenReturn(Optional.of(profile));
+        when(caretakerProfileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(fileAssetService.getById(500L)).thenReturn(FileAssetResponse.builder().id(500L).url("http://x/file.pdf").build());
+
+        service.review(1L, DocumentReviewStatusEnum.REJECTED);
+
+        assertThat(profile.getVerificationStatus()).isEqualTo(CaretakerVerificationStatusEnum.REJECTED);
     }
 
     @Test
@@ -158,5 +192,19 @@ class CaretakerVerificationDocumentServiceImplTest {
                 .isInstanceOf(GenericException.class)
                 .extracting(ex -> ((GenericException) ex).getExceptionCode())
                 .isEqualTo(ExceptionCodeEnum.CARETAKER_VERIFICATION_DOCUMENT_NOT_FOUND);
+    }
+
+    @Test
+    void reviewingADocumentWhoseCaretakerProfileNoLongerExistsThrowsNotFound() {
+        CaretakerVerificationDocument doc = CaretakerVerificationDocument.builder()
+                .id(1L).caretakerId(100L).fileAssetId(500L).docType("ID_PROOF").reviewStatus(DocumentReviewStatusEnum.PENDING).build();
+        when(documentRepository.findById(1L)).thenReturn(Optional.of(doc));
+        when(documentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(caretakerProfileRepository.findById(100L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.review(1L, DocumentReviewStatusEnum.APPROVED))
+                .isInstanceOf(GenericException.class)
+                .extracting(ex -> ((GenericException) ex).getExceptionCode())
+                .isEqualTo(ExceptionCodeEnum.CARETAKER_PROFILE_NOT_FOUND);
     }
 }
