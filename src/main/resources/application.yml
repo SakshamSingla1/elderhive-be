@@ -57,6 +57,24 @@ server:
     mime-types: application/json,application/xml,text/html,text/plain,text/css,application/javascript
     min-response-size: 1024
 
+# ============================================================================
+# Prompt 108 - OPTIONAL REAL-PROVIDER MATRIX (consolidated here purely as documentation;
+# each property below still lives in its own app.* section further down, nothing moved).
+# Every one of these degrades to a free/simulated fallback when absent - local dev and CI
+# need zero real accounts for any of them to boot and run fully.
+#
+#   app.mail.enabled      (MAIL_ENABLED)       false -> SimulatedEmailServiceImpl (log-only)
+#     + mail host/port/username/password        true  -> RealEmailServiceImpl (real SMTP)
+#   app.sms.enabled       (SMS_ENABLED)        false -> SimulatedSmsSenderService (log-only)
+#     + sms.twilio.*                             true  -> TwilioSmsSenderService (real Twilio)
+#   app.geocoding.enabled (GEOCODING_ENABLED)  false -> NominatimGeocodingService (free, no key)
+#     + geocoding.mapbox.access-token            true  -> MapboxGeocodingService (real Mapbox)
+#   app.web-push.vapid.*  (VAPID_*)            blank -> an ephemeral key pair every boot
+#   app.file-storage / CloudinaryConfig        blank -> local-disk storage (not durable
+#     (CLOUDINARY_*)                                     across redeploys on most hosts)
+#   app.payment / stripe.* (STRIPE_*)          blank -> every payment call fails fast with
+#                                                       PAYMENT_GATEWAY_NOT_CONFIGURED
+# ============================================================================
 app:
   url: ${APP_URL:http://localhost:8080}
   frontend:
