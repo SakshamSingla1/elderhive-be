@@ -5,6 +5,7 @@ import com.elderhive.entities.Notification;
 import com.elderhive.entities.NotificationDeliveryLog;
 import com.elderhive.entities.NotificationPreference;
 import com.elderhive.entities.NotificationTemplate;
+import com.elderhive.entities.User;
 import com.elderhive.enums.ExceptionCodeEnum;
 import com.elderhive.enums.NotificationChannelEnum;
 import com.elderhive.enums.NotificationDeliveryStatusEnum;
@@ -18,6 +19,8 @@ import com.elderhive.repositories.UserRepository;
 import com.elderhive.services.NotificationService;
 import com.elderhive.services.RenderedNotification;
 import com.elderhive.services.TemplateRenderer;
+import com.elderhive.sms.SmsSendResult;
+import com.elderhive.sms.SmsSenderService;
 import com.elderhive.webpush.WebPushSenderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -50,6 +53,7 @@ public class NotificationServiceImpl implements NotificationService {
     private final NotificationPreferenceRepository notificationPreferenceRepository;
     private final NotificationDeliveryLogRepository notificationDeliveryLogRepository;
     private final WebPushSenderService webPushSenderService;
+    private final SmsSenderService smsSenderService;
     private final UserRepository userRepository;
     private final SimpMessagingTemplate messagingTemplate;
 
@@ -66,7 +70,7 @@ public class NotificationServiceImpl implements NotificationService {
     }
 
     private void doSend(String templateKey, Map<String, String> variables, Long targetUserId, boolean bypassPreferences) throws GenericException {
-        userRepository.findById(targetUserId)
+        User targetUser = userRepository.findById(targetUserId)
                 .orElseThrow(() -> new GenericException(ExceptionCodeEnum.USER_NOT_FOUND,
                         "User not found: " + targetUserId));
 
@@ -89,7 +93,7 @@ public class NotificationServiceImpl implements NotificationService {
         // template's own channel flags or the user's preference (see NotificationPreference's
         // own "absence means in-app only" contract: this is the one channel that is never
         // gated at all).
-        writeDeliveryLog(notification, NotificationChannelEnum.IN_APP, rendered);
+        writeDeliveryLog(notification, NotificationChannelEnum.IN_APP, rendered, NotificationDeliveryStatusEnum.SENT);
 
         // bypassPreferences (sendUrgent) skips this lookup entirely - every channel the
         // template supports is enabled unconditionally, so targetUserId's own preference
@@ -102,13 +106,14 @@ public class NotificationServiceImpl implements NotificationService {
         boolean webPushEnabled = bypassPreferences || (preference != null && preference.isWebPushEnabled());
 
         if (template.isSms() && smsEnabled) {
-            log.info("Simulated SMS to user {}: {}", targetUserId, rendered.subject());
-            writeDeliveryLog(notification, NotificationChannelEnum.SIMULATED_SMS, rendered);
+            SmsSendResult smsResult = smsSenderService.send(targetUser.getPhone(), rendered.body());
+            writeDeliveryLog(notification, smsResult.channelUsed(), rendered,
+                    smsResult.success() ? NotificationDeliveryStatusEnum.SENT : NotificationDeliveryStatusEnum.FAILED);
         }
 
         if (template.isEmail() && emailEnabled) {
             log.info("Simulated email to user {}: {}", targetUserId, rendered.subject());
-            writeDeliveryLog(notification, NotificationChannelEnum.SIMULATED_EMAIL, rendered);
+            writeDeliveryLog(notification, NotificationChannelEnum.SIMULATED_EMAIL, rendered, NotificationDeliveryStatusEnum.SENT);
         }
 
         if (template.isWebPush() && webPushEnabled) {
@@ -172,11 +177,11 @@ public class NotificationServiceImpl implements NotificationService {
     }
 
     private void writeDeliveryLog(Notification notification, NotificationChannelEnum channel,
-                                   RenderedNotification rendered) {
+                                   RenderedNotification rendered, NotificationDeliveryStatusEnum status) {
         notificationDeliveryLogRepository.save(NotificationDeliveryLog.builder()
                 .notificationId(notification.getId())
                 .channel(channel)
-                .status(NotificationDeliveryStatusEnum.SENT)
+                .status(status)
                 .subject(rendered.subject())
                 .body(rendered.body())
                 .build());

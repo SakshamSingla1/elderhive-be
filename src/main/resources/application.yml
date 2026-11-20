@@ -69,6 +69,15 @@ app:
     # Never flip this true without MAIL_USERNAME/MAIL_PASSWORD actually set, or every send
     # fails at call time against an unauthenticated SMTP connection.
     enabled: ${MAIL_ENABLED:false}
+  sms:
+    # false -> SimulatedSmsSenderService (log-only) is the active SmsSenderService bean, no
+    # Twilio account needed. true -> TwilioSmsSenderService sends over the account below.
+    # Never flip this true without every twilio.* setting below actually set.
+    enabled: ${SMS_ENABLED:false}
+    twilio:
+      account-sid: ${TWILIO_ACCOUNT_SID:}
+      auth-token: ${TWILIO_AUTH_TOKEN:}
+      from-number: ${TWILIO_FROM_NUMBER:}
   cookie:
     # false in local dev (plain http://localhost) since a Secure cookie is never sent
     # back by the browser over plain HTTP - would silently break login locally if this

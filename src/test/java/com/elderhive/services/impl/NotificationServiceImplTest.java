@@ -7,6 +7,7 @@ import com.elderhive.entities.NotificationTemplate;
 import com.elderhive.entities.User;
 import com.elderhive.enums.ExceptionCodeEnum;
 import com.elderhive.enums.NotificationChannelEnum;
+import com.elderhive.enums.NotificationDeliveryStatusEnum;
 import com.elderhive.enums.NotificationTypeEnum;
 import com.elderhive.enums.UserStatusEnum;
 import com.elderhive.enums.UserTypeEnum;
@@ -18,6 +19,8 @@ import com.elderhive.repositories.NotificationTemplateRepository;
 import com.elderhive.repositories.UserRepository;
 import com.elderhive.services.RenderedNotification;
 import com.elderhive.services.TemplateRenderer;
+import com.elderhive.sms.SmsSendResult;
+import com.elderhive.sms.SmsSenderService;
 import com.elderhive.webpush.WebPushSenderService;
 import com.elderhive.dtos.Notification.NotificationResponse;
 import org.junit.jupiter.api.Test;
@@ -70,6 +73,9 @@ class NotificationServiceImplTest {
     private WebPushSenderService webPushSenderService;
 
     @Mock
+    private SmsSenderService smsSenderService;
+
+    @Mock
     private UserRepository userRepository;
 
     @Mock
@@ -79,7 +85,7 @@ class NotificationServiceImplTest {
     private NotificationServiceImpl notificationService;
 
     private User sampleUser() {
-        return User.builder().id(USER_ID).email("user@example.com").passwordHash("hashed")
+        return User.builder().id(USER_ID).email("user@example.com").phone("+15551234567").passwordHash("hashed")
                 .userType(UserTypeEnum.ELDER).status(UserStatusEnum.ACTIVE).build();
     }
 
@@ -145,14 +151,36 @@ class NotificationServiceImplTest {
                 .inAppEnabled(true).smsEnabled(true).emailEnabled(true).webPushEnabled(false).build();
         when(notificationPreferenceRepository.findByUserIdAndType(USER_ID, NotificationTypeEnum.BOOKING))
                 .thenReturn(Optional.of(preference));
+        when(smsSenderService.send(eq("+15551234567"), eq("Body")))
+                .thenReturn(SmsSendResult.success(NotificationChannelEnum.SIMULATED_SMS, null));
 
         notificationService.send("key", Map.of(), USER_ID);
 
+        verify(smsSenderService, times(1)).send("+15551234567", "Body");
         ArgumentCaptor<NotificationDeliveryLog> logCaptor = ArgumentCaptor.forClass(NotificationDeliveryLog.class);
         verify(notificationDeliveryLogRepository, times(3)).save(logCaptor.capture());
         assertThat(logCaptor.getAllValues()).extracting(NotificationDeliveryLog::getChannel)
                 .containsExactlyInAnyOrder(NotificationChannelEnum.IN_APP, NotificationChannelEnum.SIMULATED_SMS,
                         NotificationChannelEnum.SIMULATED_EMAIL);
+    }
+
+    @Test
+    void writesAFailedSmsDeliveryLogWhenTheSenderReportsFailureWithoutThrowing() throws GenericException {
+        stubCommon(template(NotificationTypeEnum.BOOKING, true, false, false));
+        NotificationPreference preference = NotificationPreference.builder()
+                .userId(USER_ID).type(NotificationTypeEnum.BOOKING).smsEnabled(true).build();
+        when(notificationPreferenceRepository.findByUserIdAndType(USER_ID, NotificationTypeEnum.BOOKING))
+                .thenReturn(Optional.of(preference));
+        when(smsSenderService.send(eq("+15551234567"), eq("Body")))
+                .thenReturn(SmsSendResult.failure(NotificationChannelEnum.SMS, "invalid number"));
+
+        notificationService.send("key", Map.of(), USER_ID);
+
+        ArgumentCaptor<NotificationDeliveryLog> logCaptor = ArgumentCaptor.forClass(NotificationDeliveryLog.class);
+        verify(notificationDeliveryLogRepository, times(2)).save(logCaptor.capture());
+        NotificationDeliveryLog smsLog = logCaptor.getAllValues().stream()
+                .filter(l -> l.getChannel() == NotificationChannelEnum.SMS).findFirst().orElseThrow();
+        assertThat(smsLog.getStatus()).isEqualTo(NotificationDeliveryStatusEnum.FAILED);
     }
 
     @Test

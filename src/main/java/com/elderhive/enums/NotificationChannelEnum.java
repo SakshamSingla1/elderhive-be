@@ -14,5 +14,8 @@ public enum NotificationChannelEnum {
     IN_APP,
     SIMULATED_SMS,
     SIMULATED_EMAIL,
-    WEB_PUSH
+    WEB_PUSH,
+    // Prompt 102's real Twilio-backed sender - SIMULATED_SMS stays untouched and keeps
+    // being written whenever Twilio credentials are absent.
+    SMS
 }
