@@ -45,6 +45,11 @@ services:
       # PAYMENT_GATEWAY_NOT_CONFIGURED, an ephemeral VAPID key pair) when left unset. Set
       # them only once you actually want that integration live. See
       # elderhive-be/.env.example for what each one does. ---
+      # Leave unset (defaults false -> SimulatedEmailServiceImpl, log-only) until
+      # MAIL_USERNAME/MAIL_PASSWORD below are actually filled in - flipping this true first
+      # makes every email send fail at call time against an unauthenticated connection.
+      - key: MAIL_ENABLED
+        sync: false
       - key: MAIL_USERNAME
         sync: false
       - key: MAIL_PASSWORD
