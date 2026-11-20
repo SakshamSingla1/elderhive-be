@@ -30,6 +30,11 @@ services:
       # the browser over plain HTTP (see application.yml's own comment on this property).
       - key: COOKIE_SECURE
         value: "true"
+      # MUST be None - the deployed frontend (Vercel) and this backend (Render) are
+      # different domains, and a Lax cookie is never sent on a cross-site fetch/XHR call.
+      # Requires COOKIE_SECURE=true (set above).
+      - key: COOKIE_SAME_SITE
+        value: "None"
       # The email of an existing ADMIN account to grant "Super Admin" to on next boot - the
       # only way to create the first fine-grained admin (AdminBootstrapSeeder). Set once,
       # safe to leave set permanently (never reassigns a role once one already exists).

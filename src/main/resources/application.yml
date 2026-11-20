@@ -70,6 +70,13 @@ app:
     # were hardcoded true the way ElderSphere's AuthController does. Every real
     # deployment MUST set COOKIE_SECURE=true (served over HTTPS).
     secure: ${COOKIE_SECURE:false}
+    # Lax works for local dev (frontend and backend are both localhost - same-site).
+    # A split deployment (frontend and backend on different domains, e.g. Vercel +
+    # Render) MUST set COOKIE_SAME_SITE=None - the browser never sends a Lax cookie on
+    # a cross-site fetch/XHR call, which would silently break every authenticated
+    # request after login. None requires Secure=true, which a real deployment already
+    # sets above.
+    same-site: ${COOKIE_SAME_SITE:Lax}
   password-reset:
     token-expiry-minutes: ${PASSWORD_RESET_TOKEN_EXPIRY_MINUTES:30}
     url: ${PASSWORD_RESET_URL:http://localhost:5173/reset-password}

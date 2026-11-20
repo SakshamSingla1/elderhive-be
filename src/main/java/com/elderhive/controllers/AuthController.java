@@ -48,6 +48,12 @@ public class AuthController {
     @Value("${app.cookie.secure}")
     private boolean secureCookies;
 
+    // "Lax" for local dev (frontend and backend are both localhost); a split deployment
+    // (frontend and backend on different domains, e.g. Vercel + Render) MUST set
+    // COOKIE_SAME_SITE=None - see application.yml's app.cookie.same-site for why.
+    @Value("${app.cookie.same-site}")
+    private String cookieSameSite;
+
     @PostMapping("/register")
     public ResponseEntity<ResponseModel<RegisterResponse>> register(@Valid @RequestBody RegisterRequest request)
             throws GenericException {
@@ -117,10 +123,12 @@ public class AuthController {
      * Sets both tokens as httpOnly cookies — never in the response body — matching
      * ElderSphere's frontend auth contract (its services/index.ts relies entirely on
      * withCredentials + httpOnly cookies, never reads a token from JS) so a stolen XSS
-     * payload can't exfiltrate a session. Two deliberate deviations from ElderSphere's
-     * own AuthController#setAuthCookies: secure is environment-driven, not hardcoded
-     * true (which would silently break local dev over plain HTTP), and SameSite=Lax
-     * per this prompt's explicit instruction, not Strict.
+     * payload can't exfiltrate a session. Deliberate deviations from ElderSphere's own
+     * AuthController#setAuthCookies: secure and sameSite are environment-driven, not
+     * hardcoded true/Lax - a hardcoded Secure=true would silently break local dev over
+     * plain HTTP, and a hardcoded SameSite=Lax would silently break every authenticated
+     * request in a split deployment (frontend and backend on different domains, e.g.
+     * Vercel + Render), since a Lax cookie is never sent on a cross-site fetch/XHR call.
      */
     private void setAuthCookies(HttpServletResponse response, String accessToken, String refreshToken) {
         ResponseCookie accessCookie = ResponseCookie.from(ACCESS_TOKEN_COOKIE_NAME, accessToken)
@@ -128,7 +136,7 @@ public class AuthController {
                 .secure(secureCookies)
                 .path("/")
                 .maxAge(accessTokenExpirationMs / 1000)
-                .sameSite("Lax")
+                .sameSite(cookieSameSite)
                 .build();
         // Scoped to /auth (not just /auth/refresh) so the browser also sends it to
         // /auth/logout — cookie Path matching is exact-prefix, so a cookie scoped to
@@ -140,7 +148,7 @@ public class AuthController {
                 .secure(secureCookies)
                 .path("/auth")
                 .maxAge(refreshTokenExpirationDays * 24 * 3600)
-                .sameSite("Lax")
+                .sameSite(cookieSameSite)
                 .build();
         response.addHeader(HttpHeaders.SET_COOKIE, accessCookie.toString());
         response.addHeader(HttpHeaders.SET_COOKIE, refreshCookie.toString());
@@ -152,14 +160,14 @@ public class AuthController {
                 .secure(secureCookies)
                 .path("/")
                 .maxAge(0)
-                .sameSite("Lax")
+                .sameSite(cookieSameSite)
                 .build();
         ResponseCookie refreshCookie = ResponseCookie.from(REFRESH_TOKEN_COOKIE_NAME, "")
                 .httpOnly(true)
                 .secure(secureCookies)
                 .path("/auth")
                 .maxAge(0)
-                .sameSite("Lax")
+                .sameSite(cookieSameSite)
                 .build();
         response.addHeader(HttpHeaders.SET_COOKIE, accessCookie.toString());
         response.addHeader(HttpHeaders.SET_COOKIE, refreshCookie.toString());
