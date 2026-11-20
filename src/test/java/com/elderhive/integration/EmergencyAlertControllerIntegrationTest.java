@@ -23,7 +23,7 @@ import com.elderhive.repositories.RoleRepository;
 import com.elderhive.repositories.UserRepository;
 import com.elderhive.security.JwtUtil;
 import com.elderhive.security.WebSocketJwtHandshakeInterceptor;
-import com.elderhive.services.impl.NominatimGeocodingClient;
+import com.elderhive.geocoding.GeocodingService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
@@ -59,7 +59,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * whichever one triggered it - the ElderSphere bug fix) gets notified, and an AuditLog
  * trail exists for the trigger plus every notification sent.
  *
- * <p>NominatimGeocodingClient is the one external-HTTP collaborator in this flow - mocked
+ * <p>GeocodingService is the one external-HTTP collaborator in this flow - mocked
  * here (this project's first use of @MockBean) so the test never makes a real network call
  * and stays deterministic/fast; trigger()'s own contract is "best-effort", so a stubbed
  * geocoder is a faithful stand-in for either a successful or a failed real lookup.
@@ -100,7 +100,7 @@ class EmergencyAlertControllerIntegrationTest {
     private ObjectMapper objectMapper;
 
     @MockitoBean
-    private NominatimGeocodingClient nominatimGeocodingClient;
+    private GeocodingService geocodingService;
 
     @Autowired
     private PresenceTracker presenceTracker;
@@ -148,7 +148,7 @@ class EmergencyAlertControllerIntegrationTest {
     }
 
     private Long triggerAlert(User owner, ElderProfile elder) throws Exception {
-        when(nominatimGeocodingClient.reverseGeocode(anyDouble(), anyDouble())).thenReturn(null);
+        when(geocodingService.reverseGeocode(anyDouble(), anyDouble())).thenReturn(null);
         String body = objectMapper.writeValueAsString(Map.of(
                 "elderProfileId", elder.getId(), "latitude", 0.0, "longitude", 0.0));
         MvcResult result = mockMvc.perform(post("/api/v1/emergency-alerts")
@@ -161,7 +161,7 @@ class EmergencyAlertControllerIntegrationTest {
 
     @Test
     void triggeringAnAlertNotifiesOnlyTheInRadiusCaretakerAndEveryLinkedFamilyMember() throws Exception {
-        when(nominatimGeocodingClient.reverseGeocode(anyDouble(), anyDouble())).thenReturn("MG Road, Bengaluru");
+        when(geocodingService.reverseGeocode(anyDouble(), anyDouble())).thenReturn("MG Road, Bengaluru");
 
         User familyOwner = persistUser("ea-trigger-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
         User coManagingFamily = persistUser("ea-trigger-comanager@example.com", UserTypeEnum.FAMILY_MEMBER);
@@ -227,7 +227,7 @@ class EmergencyAlertControllerIntegrationTest {
 
     @Test
     void anElderCanTriggerTheirOwnAlert() throws Exception {
-        when(nominatimGeocodingClient.reverseGeocode(anyDouble(), anyDouble())).thenReturn(null);
+        when(geocodingService.reverseGeocode(anyDouble(), anyDouble())).thenReturn(null);
 
         User familyOwner = persistUser("ea-elderself-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
         User elderUser = persistUser("ea-elderself-elder@example.com", UserTypeEnum.ELDER);
@@ -328,7 +328,7 @@ class EmergencyAlertControllerIntegrationTest {
     void aFreshlyTriggeredAlertIsNotOverdueAndTheJsonKeyIsLiterallyIsOverdue() throws Exception {
         User familyOwner = persistUser("ea-overdue-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
         ElderProfile elder = elderProfileRepository.save(ElderProfile.builder().familyUserId(familyOwner.getId()).fullName("Robert").build());
-        when(nominatimGeocodingClient.reverseGeocode(anyDouble(), anyDouble())).thenReturn(null);
+        when(geocodingService.reverseGeocode(anyDouble(), anyDouble())).thenReturn(null);
         String body = objectMapper.writeValueAsString(Map.of("elderProfileId", elder.getId(), "latitude", 0.0, "longitude", 0.0));
 
         // Asserts the literal JSON key "isOverdue" - the Lombok/Jackson double-"is"-
@@ -343,7 +343,7 @@ class EmergencyAlertControllerIntegrationTest {
 
     @Test
     void nearbyReturnsOnlyAlertsWithinRangeOfTheCallingCaretakerWithDistanceSetAndOrderedNearestFirst() throws Exception {
-        when(nominatimGeocodingClient.reverseGeocode(anyDouble(), anyDouble())).thenReturn(null);
+        when(geocodingService.reverseGeocode(anyDouble(), anyDouble())).thenReturn(null);
         User familyOwner = persistUser("ea-nearby-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
         User nearCaretakerUser = persistUser("ea-nearby-near-caretaker@example.com", UserTypeEnum.CARETAKER);
         User farCaretakerUser = persistUser("ea-nearby-far-caretaker@example.com", UserTypeEnum.CARETAKER);
@@ -380,7 +380,7 @@ class EmergencyAlertControllerIntegrationTest {
 
     @Test
     void nearbyNoLongerIncludesAnAlertOnceItsBeenResolved() throws Exception {
-        when(nominatimGeocodingClient.reverseGeocode(anyDouble(), anyDouble())).thenReturn(null);
+        when(geocodingService.reverseGeocode(anyDouble(), anyDouble())).thenReturn(null);
         User familyOwner = persistUser("ea-nearby-resolved-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
         User caretakerUser = persistUser("ea-nearby-resolved-caretaker@example.com", UserTypeEnum.CARETAKER);
         persistCaretaker(caretakerUser.getId(), 0.0, 0.0, 10.0, CaretakerVerificationStatusEnum.VERIFIED);
@@ -411,7 +411,7 @@ class EmergencyAlertControllerIntegrationTest {
 
     @Test
     void adminGetAllListsEveryAlertAndFiltersByStatusAndElderProfileId() throws Exception {
-        when(nominatimGeocodingClient.reverseGeocode(anyDouble(), anyDouble())).thenReturn(null);
+        when(geocodingService.reverseGeocode(anyDouble(), anyDouble())).thenReturn(null);
         User familyOwner = persistUser("ea-admin-list-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
         User admin = persistAdminWithEmergencyDispatch("ea-admin-list-admin@example.com");
         User plainAdmin = persistUser("ea-admin-list-plain-admin@example.com", UserTypeEnum.ADMIN);
@@ -447,7 +447,7 @@ class EmergencyAlertControllerIntegrationTest {
         User familyOwner = persistUser("ea-admin-getbyid-owner@example.com", UserTypeEnum.FAMILY_MEMBER);
         User admin = persistAdminWithEmergencyDispatch("ea-admin-getbyid-admin@example.com");
         ElderProfile elder = elderProfileRepository.save(ElderProfile.builder().familyUserId(familyOwner.getId()).fullName("Robert").build());
-        when(nominatimGeocodingClient.reverseGeocode(anyDouble(), anyDouble())).thenReturn("MG Road, Bengaluru");
+        when(geocodingService.reverseGeocode(anyDouble(), anyDouble())).thenReturn("MG Road, Bengaluru");
         String body = objectMapper.writeValueAsString(Map.of("elderProfileId", elder.getId(), "latitude", 0.0, "longitude", 0.0));
         MvcResult result = mockMvc.perform(post("/api/v1/emergency-alerts").cookie(loginCookieFor(familyOwner))
                         .contentType("application/json").content(body))

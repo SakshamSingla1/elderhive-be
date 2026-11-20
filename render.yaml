@@ -81,6 +81,12 @@ services:
         sync: false
       - key: GEOCODING_CONTACT_EMAIL
         sync: false
+      # Leave unset (defaults false -> NominatimGeocodingService, free/no key) until
+      # MAPBOX_ACCESS_TOKEN below is actually filled in.
+      - key: GEOCODING_ENABLED
+        sync: false
+      - key: MAPBOX_ACCESS_TOKEN
+        sync: false
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_PUBLISHABLE_KEY

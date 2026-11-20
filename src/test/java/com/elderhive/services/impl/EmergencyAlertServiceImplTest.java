@@ -17,6 +17,7 @@ import com.elderhive.enums.EntityTypeEnum;
 import com.elderhive.enums.ExceptionCodeEnum;
 import com.elderhive.enums.UserTypeEnum;
 import com.elderhive.exceptions.GenericException;
+import com.elderhive.geocoding.GeocodingService;
 import com.elderhive.repositories.CaretakerProfileRepository;
 import com.elderhive.repositories.ElderProfileRepository;
 import com.elderhive.repositories.EmergencyAlertRepository;
@@ -80,7 +81,7 @@ class EmergencyAlertServiceImplTest {
     @Mock
     private AdminPermissionGuard adminPermissionGuard;
     @Mock
-    private NominatimGeocodingClient nominatimGeocodingClient;
+    private GeocodingService geocodingService;
     @Mock
     private SimpMessagingTemplate messagingTemplate;
     @Spy
@@ -157,7 +158,7 @@ class EmergencyAlertServiceImplTest {
     @Test
     void notifiesEveryMatchedCaretakerViaSendUrgentNotSend() throws GenericException {
         when(elderProfileRepository.findById(ELDER_PROFILE_ID)).thenReturn(Optional.of(elderProfile()));
-        when(nominatimGeocodingClient.reverseGeocode(anyDouble(), anyDouble())).thenReturn("MG Road, Bengaluru");
+        when(geocodingService.reverseGeocode(anyDouble(), anyDouble())).thenReturn("MG Road, Bengaluru");
         stubSave();
         when(proximityMatchingService.findMatchingCaretakers(12.9716, 77.5946))
                 .thenReturn(List.of(match(1L, 101L, 1.1), match(2L, 102L, 4.4)));
@@ -175,7 +176,7 @@ class EmergencyAlertServiceImplTest {
     @Test
     void notifiesTheOriginalOwnerAndEveryCoManagingFamilyMemberNotJustOne() throws GenericException {
         when(elderProfileRepository.findById(ELDER_PROFILE_ID)).thenReturn(Optional.of(elderProfile()));
-        when(nominatimGeocodingClient.reverseGeocode(anyDouble(), anyDouble())).thenReturn(null);
+        when(geocodingService.reverseGeocode(anyDouble(), anyDouble())).thenReturn(null);
         stubSave();
         when(familyElderLinkRepository.existsByElderProfileIdAndFamilyUserId(ELDER_PROFILE_ID, 20L)).thenReturn(true);
         when(proximityMatchingService.findMatchingCaretakers(anyDouble(), anyDouble())).thenReturn(List.of());
@@ -195,7 +196,7 @@ class EmergencyAlertServiceImplTest {
     @Test
     void falsyAddressFallsBackToAPlaceholderRatherThanAThrownPlaceholderError() throws GenericException {
         when(elderProfileRepository.findById(ELDER_PROFILE_ID)).thenReturn(Optional.of(elderProfile()));
-        when(nominatimGeocodingClient.reverseGeocode(anyDouble(), anyDouble())).thenReturn(null);
+        when(geocodingService.reverseGeocode(anyDouble(), anyDouble())).thenReturn(null);
         stubSave();
         when(proximityMatchingService.findMatchingCaretakers(anyDouble(), anyDouble())).thenReturn(List.of());
         when(familyElderLinkRepository.findByElderProfileId(ELDER_PROFILE_ID)).thenReturn(List.of());
@@ -211,7 +212,7 @@ class EmergencyAlertServiceImplTest {
     @Test
     void oneFailedNotificationDoesNotPreventTheRestOfTheFanOut() throws GenericException {
         when(elderProfileRepository.findById(ELDER_PROFILE_ID)).thenReturn(Optional.of(elderProfile()));
-        when(nominatimGeocodingClient.reverseGeocode(anyDouble(), anyDouble())).thenReturn(null);
+        when(geocodingService.reverseGeocode(anyDouble(), anyDouble())).thenReturn(null);
         stubSave();
         when(proximityMatchingService.findMatchingCaretakers(anyDouble(), anyDouble())).thenReturn(List.of());
         when(familyElderLinkRepository.findByElderProfileId(ELDER_PROFILE_ID)).thenReturn(List.of(
@@ -228,7 +229,7 @@ class EmergencyAlertServiceImplTest {
     @Test
     void logsAnAuditTrailForTheTriggerAndEveryNotificationSent() throws GenericException {
         when(elderProfileRepository.findById(ELDER_PROFILE_ID)).thenReturn(Optional.of(elderProfile()));
-        when(nominatimGeocodingClient.reverseGeocode(anyDouble(), anyDouble())).thenReturn("MG Road");
+        when(geocodingService.reverseGeocode(anyDouble(), anyDouble())).thenReturn("MG Road");
         stubSave();
         when(proximityMatchingService.findMatchingCaretakers(anyDouble(), anyDouble())).thenReturn(List.of(match(1L, 101L, 2.0)));
         when(familyElderLinkRepository.findByElderProfileId(ELDER_PROFILE_ID)).thenReturn(List.of());
@@ -583,7 +584,7 @@ class EmergencyAlertServiceImplTest {
     @Test
     void triggerDoesNotBroadcastToTheLiveTopic() throws GenericException {
         when(elderProfileRepository.findById(ELDER_PROFILE_ID)).thenReturn(Optional.of(elderProfile()));
-        when(nominatimGeocodingClient.reverseGeocode(anyDouble(), anyDouble())).thenReturn(null);
+        when(geocodingService.reverseGeocode(anyDouble(), anyDouble())).thenReturn(null);
         stubSave();
         when(proximityMatchingService.findMatchingCaretakers(anyDouble(), anyDouble())).thenReturn(List.of());
         when(familyElderLinkRepository.findByElderProfileId(ELDER_PROFILE_ID)).thenReturn(List.of());

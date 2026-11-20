@@ -16,6 +16,7 @@ import com.elderhive.enums.EntityTypeEnum;
 import com.elderhive.enums.ExceptionCodeEnum;
 import com.elderhive.enums.UserTypeEnum;
 import com.elderhive.exceptions.GenericException;
+import com.elderhive.geocoding.GeocodingService;
 import com.elderhive.repositories.CaretakerProfileRepository;
 import com.elderhive.repositories.ElderProfileRepository;
 import com.elderhive.repositories.EmergencyAlertRepository;
@@ -79,7 +80,7 @@ public class EmergencyAlertServiceImpl implements EmergencyAlertService {
     private final AuditLogService auditLogService;
     private final AdminConfigService adminConfigService;
     private final AdminPermissionGuard adminPermissionGuard;
-    private final NominatimGeocodingClient nominatimGeocodingClient;
+    private final GeocodingService geocodingService;
     private final ObjectMapper objectMapper;
     private final SimpMessagingTemplate messagingTemplate;
 
@@ -98,7 +99,7 @@ public class EmergencyAlertServiceImpl implements EmergencyAlertService {
                 .orElseThrow(() -> new GenericException(ExceptionCodeEnum.ELDER_PROFILE_NOT_FOUND, "Elder profile not found"));
         assertCanTrigger(elderProfile, caller);
 
-        String address = nominatimGeocodingClient.reverseGeocode(request.getLatitude(), request.getLongitude());
+        String address = geocodingService.reverseGeocode(request.getLatitude(), request.getLongitude());
 
         EmergencyAlert alert = emergencyAlertRepository.save(EmergencyAlert.builder()
                 .elderProfileId(elderProfile.getId())
