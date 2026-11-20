@@ -1,0 +1,2 @@
+ALTER TABLE elder_profiles ADD COLUMN latitude DOUBLE PRECISION;
+ALTER TABLE elder_profiles ADD COLUMN longitude DOUBLE PRECISION;

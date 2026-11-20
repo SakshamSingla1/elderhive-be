@@ -23,6 +23,8 @@ public class ElderProfileResponse {
     private GenderEnum gender;
     private String medicalConditions;
     private String address;
+    private Double latitude;
+    private Double longitude;
     private String emergencyContactName;
     private String emergencyContactPhone;
     private LocalDateTime createdAt;

@@ -82,6 +82,37 @@ class ElderProfileServiceImplTest {
     }
 
     @Test
+    void createAndUpdatePersistAndReturnTheAutocompleteFilledCoordinates() throws GenericException {
+        ElderProfileRequest createRequest = request("Robert Smith");
+        createRequest.setFamilyUserId(FAMILY_USER_ID);
+        createRequest.setAddress("MG Road, Bengaluru, India");
+        createRequest.setLatitude(12.9716);
+        createRequest.setLongitude(77.5946);
+        when(elderProfileRepository.save(any(ElderProfile.class))).thenAnswer(inv -> {
+            ElderProfile p = inv.getArgument(0);
+            p.setId(1L);
+            return p;
+        });
+
+        ElderProfileResponse created = elderProfileService.create(createRequest);
+
+        assertThat(created.getLatitude()).isEqualTo(12.9716);
+        assertThat(created.getLongitude()).isEqualTo(77.5946);
+
+        ElderProfile existing = profile(FAMILY_USER_ID, null);
+        when(elderProfileRepository.findById(1L)).thenReturn(Optional.of(existing));
+        when(elderProfileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        ElderProfileRequest updateRequest = request("Robert Smith");
+        updateRequest.setLatitude(13.0827);
+        updateRequest.setLongitude(80.2707);
+
+        ElderProfileResponse updated = elderProfileService.update(1L, updateRequest, user(FAMILY_USER_ID, UserTypeEnum.FAMILY_MEMBER));
+
+        assertThat(updated.getLatitude()).isEqualTo(13.0827);
+        assertThat(updated.getLongitude()).isEqualTo(80.2707);
+    }
+
+    @Test
     void theFamilyOwnerCanGetUpdateAndDelete() throws GenericException {
         ElderProfile profile = profile(FAMILY_USER_ID, null);
         when(elderProfileRepository.findById(1L)).thenReturn(Optional.of(profile));

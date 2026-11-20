@@ -48,6 +48,8 @@ public class ElderProfileServiceImpl implements ElderProfileService {
                 .gender(request.getGender())
                 .medicalConditions(request.getMedicalConditions())
                 .address(request.getAddress())
+                .latitude(request.getLatitude())
+                .longitude(request.getLongitude())
                 .emergencyContactName(request.getEmergencyContactName())
                 .emergencyContactPhone(request.getEmergencyContactPhone())
                 .build();
@@ -64,6 +66,8 @@ public class ElderProfileServiceImpl implements ElderProfileService {
         profile.setGender(request.getGender());
         profile.setMedicalConditions(request.getMedicalConditions());
         profile.setAddress(request.getAddress());
+        profile.setLatitude(request.getLatitude());
+        profile.setLongitude(request.getLongitude());
         profile.setEmergencyContactName(request.getEmergencyContactName());
         profile.setEmergencyContactPhone(request.getEmergencyContactPhone());
         return toResponse(elderProfileRepository.save(profile));
@@ -137,6 +141,8 @@ public class ElderProfileServiceImpl implements ElderProfileService {
                 .gender(profile.getGender())
                 .medicalConditions(profile.getMedicalConditions())
                 .address(profile.getAddress())
+                .latitude(profile.getLatitude())
+                .longitude(profile.getLongitude())
                 .emergencyContactName(profile.getEmergencyContactName())
                 .emergencyContactPhone(profile.getEmergencyContactPhone())
                 .createdAt(profile.getCreatedAt())

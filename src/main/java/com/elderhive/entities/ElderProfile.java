@@ -66,6 +66,12 @@ public class ElderProfile extends Auditable {
     @Column(columnDefinition = "TEXT")
     private String address;
 
+    // Added Prompt 104, mirroring CaretakerProfile's own latitude/longitude (Prompt 64) -
+    // backs the address-autocomplete-filled coordinates rather than text alone.
+    private Double latitude;
+
+    private Double longitude;
+
     @Column(name = "emergency_contact_name")
     private String emergencyContactName;
 
