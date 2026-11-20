@@ -18,6 +18,11 @@ public interface CaretakerProfileRepository extends JpaRepository<CaretakerProfi
 
     boolean existsByUserId(Long userId);
 
+    // Backs the public GET /api/v1/caretakers/me/calendar.ics (Prompt 106) - the token IS
+    // the authorization for that unauthenticated-by-cookie route, so an unknown token must
+    // resolve to nothing rather than ever matching the wrong caretaker.
+    Optional<CaretakerProfile> findByCalendarShareToken(String calendarShareToken);
+
     // Backs AdminDashboardController's own "pending caretaker verifications" stat
     // (Prompt 94) - how many CaretakerProfiles are still awaiting an admin's
     // approve/reject decision (CaretakerVerificationDocumentController#review).

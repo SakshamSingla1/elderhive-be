@@ -114,6 +114,10 @@ public class SecurityConfig {
                         // @PreAuthorize.
                         .requestMatchers(HttpMethod.GET, "/api/v1/landing/page").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/contact-us").permitAll()
+                        // Calendar apps fetch this on their own schedule, unauthenticated by
+                        // cookie - the unguessable `token` query param IS this route's
+                        // actual auth (CaretakerCalendarServiceImpl#buildIcsFeed), Prompt 106.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/caretakers/me/calendar.ics").permitAll()
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())

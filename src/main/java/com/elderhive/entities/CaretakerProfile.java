@@ -86,4 +86,12 @@ public class CaretakerProfile extends Auditable {
 
     @Column(name = "service_radius_km")
     private Double serviceRadiusKm;
+
+    // Added Prompt 106 - the unguessable token in GET /api/v1/caretakers/me/calendar.ics?
+    // token=... (calendar apps fetch that URL on their own schedule, unauthenticated by
+    // cookie, so this token IS the authorization). Null until the caretaker first visits
+    // the "Sync to your calendar" section; regenerating overwrites it, invalidating any
+    // previously-shared link.
+    @Column(name = "calendar_share_token", unique = true)
+    private String calendarShareToken;
 }

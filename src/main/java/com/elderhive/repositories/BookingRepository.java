@@ -48,6 +48,12 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     List<Booking> findByRecurringGroupIdOrderByScheduledDateAsc(String recurringGroupId);
 
+    // Backs the caretaker calendar .ics export (Prompt 106) - every upcoming
+    // CONFIRMED/IN_PROGRESS booking, oldest first, so the feed's events come back in
+    // chronological order for the importing calendar app.
+    List<Booking> findByCaretakerIdAndStatusInAndScheduledDateGreaterThanEqualOrderByScheduledDateAscScheduledTimeAsc(
+            Long caretakerId, List<BookingStatusEnum> statuses, LocalDate fromDate);
+
     // Backs AdminDashboardController's own "bookings this week" stat (Prompt 94) - every
     // booking scheduled in the given date range regardless of status (a cancelled booking
     // still represents scheduling volume for that week), inclusive on both ends (Spring
